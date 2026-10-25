@@ -248,29 +248,38 @@ def settings_menu(config: dict) -> None:
 
 
 def saved_channels_menu(config: dict) -> None:
+    page = 0
     while True:
         channels = config["channels"]
         if not channels:
             print("\n还没有保存的 YouTuber。可以先在主菜单添加。")
             pause()
             return
-        selection = choose("已保存 YouTuber（可重复运行）",
-                           [f"{x['name']} — {x['url']}" for x in channels] + [
-                               "删除已保存频道", "返回主菜单",
-                           ])
-        if selection == len(channels)+1:
+        size = 7
+        total = (len(channels) + size - 1) // size
+        page = min(page, total - 1)
+        shown = channels[page * size:(page + 1) * size]
+        options = [f"{x['name']} — {x['url']}" for x in shown]
+        commands = ["下一页" if page + 1 < total else "返回第一页", "删除已保存频道", "返回主菜单"]
+        selection = choose(f"已保存 YouTuber · 第 {page+1}/{total} 页", options + commands)
+        if selection == len(shown) + 2:
             return
-        if selection == len(channels):
-            deleted = choose("选择要删除的频道", [x["name"] for x in channels] + ["取消"])
-            if deleted < len(channels):
-                removed = channels.pop(deleted)
+        if selection == len(shown):
+            page = (page + 1) % total
+            continue
+        if selection == len(shown) + 1:
+            deleting = choose("选择要删除的频道", [x["name"] for x in shown] + ["取消"])
+            if deleting < len(shown):
+                removed = channels.pop(page * size + deleting)
                 if config["last_channel"] == removed["url"]:
                     config["last_channel"] = ""
                 save_settings(config)
             continue
-        entry = channels[selection]
-        remember_channel(Channel(name=entry["name"], url=entry["url"]), config)
-        launch(Channel(name=entry["name"], url=entry["url"]), config)
+        entry = shown[selection]
+        selected = Channel(name=entry["name"], url=entry["url"])
+        remember_channel(selected, config)
+        launch(selected, config)
+
 
 
 def main() -> int:
