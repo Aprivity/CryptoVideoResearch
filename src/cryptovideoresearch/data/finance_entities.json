@@ -1,0 +1,359 @@
+{
+  "schema_version": "0.8.0",
+  "note": "Research spelling aids only. Labels are not independently verified facts or ASR acoustic confidence.",
+  "entities": [
+    {
+      "id": "coreweave",
+      "name": "CoreWeave",
+      "type": "company",
+      "ticker": "CRWV",
+      "aliases": [
+        "CoreWeave",
+        "Core Weave",
+        "CoreWave",
+        "科尔威夫"
+      ],
+      "suspect_aliases": [
+        "扩尔威武",
+        "康衛覆",
+        "康卫覆"
+      ]
+    },
+    {
+      "id": "goldman-sachs",
+      "name": "Goldman Sachs",
+      "type": "institution",
+      "ticker": "GS",
+      "aliases": [
+        "Goldman Sachs",
+        "高盛"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "bernstein",
+      "name": "Bernstein",
+      "type": "institution",
+      "ticker": null,
+      "aliases": [
+        "Bernstein",
+        "伯恩斯坦",
+        "博恩斯坦"
+      ],
+      "suspect_aliases": [
+        "文斯坦",
+        "Bonstown"
+      ]
+    },
+    {
+      "id": "american-express",
+      "name": "American Express",
+      "type": "company",
+      "ticker": "AXP",
+      "aliases": [
+        "American Express",
+        "美国运通",
+        "美國運通",
+        "Amex"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "moderna",
+      "name": "Moderna",
+      "type": "company",
+      "ticker": "MRNA",
+      "aliases": [
+        "Moderna",
+        "莫德纳",
+        "莫德納"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "merck",
+      "name": "Merck & Co.",
+      "type": "company",
+      "ticker": "MRK",
+      "aliases": [
+        "Merck",
+        "默沙东",
+        "默沙東"
+      ],
+      "suspect_aliases": [
+        "莫莎東"
+      ]
+    },
+    {
+      "id": "keytruda",
+      "name": "Keytruda",
+      "type": "drug",
+      "ticker": null,
+      "aliases": [
+        "Keytruda",
+        "可瑞达",
+        "可瑞達",
+        "帕博利珠单抗"
+      ],
+      "suspect_aliases": [
+        "Kichu"
+      ]
+    },
+    {
+      "id": "nvidia",
+      "name": "NVIDIA",
+      "type": "company",
+      "ticker": "NVDA",
+      "aliases": [
+        "NVIDIA",
+        "Nvidia",
+        "英伟达",
+        "英偉達"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "micron",
+      "name": "Micron Technology",
+      "type": "company",
+      "ticker": "MU",
+      "aliases": [
+        "Micron Technology",
+        "Micron",
+        "美光",
+        "美光科技"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "sk-hynix",
+      "name": "SK hynix",
+      "type": "company",
+      "ticker": null,
+      "aliases": [
+        "SK hynix",
+        "SK Hynix",
+        "SK海力士",
+        "海力士"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "solidigm",
+      "name": "Solidigm",
+      "type": "company",
+      "ticker": null,
+      "aliases": [
+        "Solidigm"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "tsmc",
+      "name": "TSMC",
+      "type": "company",
+      "ticker": "TSM",
+      "aliases": [
+        "TSMC",
+        "台积电",
+        "台積電"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "meta",
+      "name": "Meta Platforms",
+      "type": "company",
+      "ticker": "META",
+      "aliases": [
+        "Meta Platforms",
+        "Meta",
+        "元宇宙公司"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "type": "company",
+      "ticker": null,
+      "aliases": [
+        "OpenAI",
+        "Open AI"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "microsoft",
+      "name": "Microsoft",
+      "type": "company",
+      "ticker": "MSFT",
+      "aliases": [
+        "Microsoft",
+        "微软",
+        "微軟"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "salesforce",
+      "name": "Salesforce",
+      "type": "company",
+      "ticker": "CRM",
+      "aliases": [
+        "Salesforce"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "space-x",
+      "name": "SpaceX",
+      "type": "company",
+      "ticker": null,
+      "aliases": [
+        "SpaceX",
+        "太空探索技术公司"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "tesla",
+      "name": "Tesla",
+      "type": "company",
+      "ticker": "TSLA",
+      "aliases": [
+        "Tesla",
+        "特斯拉"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "bitcoin",
+      "name": "Bitcoin",
+      "type": "asset",
+      "ticker": "BTC",
+      "aliases": [
+        "Bitcoin",
+        "比特币",
+        "比特幣",
+        "BTC"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "ethereum",
+      "name": "Ethereum",
+      "type": "asset",
+      "ticker": "ETH",
+      "aliases": [
+        "Ethereum",
+        "以太坊",
+        "ETH"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "fomc",
+      "name": "FOMC",
+      "type": "indicator",
+      "ticker": null,
+      "aliases": [
+        "FOMC",
+        "联邦公开市场委员会",
+        "聯邦公開市場委員會"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "cpi",
+      "name": "CPI",
+      "type": "indicator",
+      "ticker": null,
+      "aliases": [
+        "CPI",
+        "消费者物价指数",
+        "消费者价格指数",
+        "消費者物價指數"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "ppi",
+      "name": "PPI",
+      "type": "indicator",
+      "ticker": null,
+      "aliases": [
+        "PPI",
+        "生产者价格指数",
+        "生產者價格指數"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "vix",
+      "name": "VIX",
+      "type": "indicator",
+      "ticker": null,
+      "aliases": [
+        "VIX",
+        "恐慌指数",
+        "恐慌指數"
+      ],
+      "suspect_aliases": [
+        "Wigs"
+      ]
+    },
+    {
+      "id": "wti",
+      "name": "WTI",
+      "type": "commodity",
+      "ticker": null,
+      "aliases": [
+        "WTI",
+        "西德州中质原油",
+        "西德州中質原油"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "sofr",
+      "name": "SOFR",
+      "type": "indicator",
+      "ticker": null,
+      "aliases": [
+        "SOFR"
+      ],
+      "suspect_aliases": []
+    },
+    {
+      "id": "cds",
+      "name": "CDS",
+      "type": "indicator",
+      "ticker": null,
+      "aliases": [
+        "CDS",
+        "信用违约互换",
+        "信用違約互換"
+      ],
+      "suspect_aliases": []
+    }
+  ],
+  "uncertain_phrases": [
+    {
+      "term": "iPhone 2",
+      "reason": "手机型号可能截断或识别不完整，不应自动补全型号"
+    },
+    {
+      "term": "美趙瓦",
+      "reason": "可能是公司或算力术语误识别，无法安全确定对应实体"
+    },
+    {
+      "term": "美赵瓦",
+      "reason": "可能是公司或算力术语误识别，无法安全确定对应实体"
+    },
+    {
+      "term": "COVID",
+      "reason": "如果视频语境为算力/公司，可能是专有名词误识别；不能直接纠正为 CoreWeave"
+    }
+  ]
+}
