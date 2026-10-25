@@ -29,6 +29,22 @@ NEWS_TERMS = ("新闻", "最新", "快讯", "市场", "解读", "分析", "走�
               "news", "market", "breaking", "update", "fed", "财报")
 HYPE_TERMS = ("暴富", "稳赚", "无脑买", "百分百", "带单", "会员群", "翻百倍", "100x", "必涨",
               "骗局", "暴涨", "崩盘", "救你的命", "千万别", "必赚", "彻底崩塌")
+# Specific catalysts are more valuable for B (news) than generic price predictions.
+# These are coarse title-based heuristics, not evidence that a reported event happened.
+EVENT_TERMS = (
+    "cpi", "ppi", "fomc", "美联储", "联储决议", "政策", "央行", "监管", "法案",
+    "关税", "通胀", "就业", "非农", "财报", "业绩", "公告", "批准", "收购",
+    "会议", "降息", "加息", "etf资金", "机构资金", "资金流入", "资金流出",
+    "财政", "油价", "原油", "供应链", "禁令", "债务", "地缘", "新闻",
+    "earnings", "inflation", "regulation", "approval", "tariffs",
+    "fed meeting", "rate decision", "institutional", "policy", "filing",
+)
+TECHNICAL_ONLY_TERMS = (
+    "技术分析", "价格预测", "预测2026", "k线", "均线", "压力位", "支撑位",
+    "阻力位", "抄底", "止盈", "止损", "上车", "入场", "vip",
+    "price prediction", "price target", "technical analysis", "support level",
+    "resistance level", "trading signals", "next move", "next price",
+)
 
 
 @dataclass
@@ -96,9 +112,12 @@ def parse_results(raw: dict, *, topic: str, query: str, hours: int, now: datetim
         relevant = sum(token in lower for token in TOPIC_TERMS.get(topic, ()))
         news = sum(token in lower for token in NEWS_TERMS)
         hype = sum(token in lower for token in HYPE_TERMS)
-        # Keep ordinary news explainers even if they lack the exact topic keywords.
-        # Search is the first filter. Score is a ranking, not factual accuracy.
-        score = min(relevant, 5) * 3 + min(news, 3) * 2 - hype * 6
+        events = sum(token in lower for token in EVENT_TERMS)
+        technical = sum(token in lower for token in TECHNICAL_ONLY_TERMS)
+        # Event relevance outweighs generic technical-analysis phrases. An
+        # event keyword in a title is NOT evidence that the event occurred.
+        score = (min(relevant, 5) * 2 + min(news, 3) * 1
+                 + min(events, 4) * 5 - min(technical, 4) * 5 - hype * 6)
         if score < -3:
             continue
         channel = str(entry.get("channel") or entry.get("uploader") or "未知频道")
