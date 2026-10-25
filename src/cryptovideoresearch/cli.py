@@ -65,8 +65,15 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     show("yt-dlp", find_ytdlp() is not None, find_ytdlp() or "")
     show("prompt file", default_prompt_path().is_file())
     print(f"[INFO] FFmpeg: {'found' if shutil.which('ffmpeg') else 'optional, not installed'}")
-    from .asr import available as asr_available
+    from .asr import available as asr_available, installed_pyav_major
+    installed_av = installed_pyav_major()
     print(f"[INFO] Optional local ASR: {'installed' if asr_available() else 'disabled (run cryptovideo asr-setup)'}")
+    if asr_available():
+        if installed_av is not None and installed_av >= 19:
+            print("[WARN] PyAV >=19 is incompatible with older faster-whisper audio decoders. "
+                  "Repair: cryptovideo asr-setup")
+        else:
+            print(f"[INFO] PyAV compatibility: {'not installed' if installed_av is None else 'major ' + str(installed_av)}")
     print(f"[INFO] Tesseract: {'found' if shutil.which('tesseract') else 'optional, not installed'}")
     print(f"[INFO] proxy: {'configured' if any(os.environ.get(k) for k in ('HTTPS_PROXY','https_proxy','HTTP_PROXY','http_proxy')) else 'not configured'}")
     try:
@@ -142,24 +149,28 @@ def asr_pip_environment(source: dict[str, str], *, pip_proxy: str | None = None,
 
 def cmd_asr_setup(args: argparse.Namespace) -> int:
     """Install opt-in ASR dependencies with a pip-compatible proxy bootstrap."""
-    from .asr import available
+    from .asr import available, installed_pyav_major
     from importlib.util import find_spec
-    if available() and find_spec("socksio") is not None:
-        print("[OK] faster-whisper and HTTPX SOCKS support are already installed.")
+    pyav_major = installed_pyav_major()
+    if (available() and find_spec("socksio") is not None
+            and pyav_major is not None and pyav_major < 19):
+        print("[OK] faster-whisper, compatible PyAV (<19) and SOCKS support already installed.")
         return 0
+    if pyav_major is not None and pyav_major >= 19:
+        print("[ASR] Detected incompatible PyAV >=19; installing compatible av>=11,<19.")
     pip_socks_available = find_spec("socks") is not None
     env, method = asr_pip_environment(
         os.environ, pip_proxy=getattr(args, "pip_proxy", None),
         pip_socks_available=pip_socks_available,
     )
-    print("[ASR] Installing or upgrading faster-whisper and httpx[socks].")
+    print("[ASR] Installing or upgrading faster-whisper, httpx[socks], and compatible PyAV.")
     print("[ASR] No Whisper model weights are downloaded by this step.")
     print(f"[ASR] pip network route: {method}")
     # Install runtime packages directly: project is already an editable
     # install, and this avoids creating an unnecessary isolated build env.
     completed = subprocess.run(
         [sys.executable, "-m", "pip", "install",
-         "faster-whisper>=1.1,<2", "httpx[socks]>=0.27,<1"],
+         "faster-whisper>=1.1,<2", "httpx[socks]>=0.27,<1", "av>=11,<19"],
         check=False, env=env,
     )
     if completed.returncode:
@@ -183,10 +194,16 @@ def cmd_login(args: argparse.Namespace) -> int:
 
 
 def require_asr_runtime() -> None:
-    """Fail early before requesting video audio when the optional extra is absent."""
-    from .asr import available
+    """Fail early on absent or incompatible optional ASR dependencies."""
+    from .asr import available, installed_pyav_major
     if not available():
         raise PipelineError("Local ASR runtime is not installed. Run: cryptovideo asr-setup")
+    pyav_major = installed_pyav_major()
+    if pyav_major is not None and pyav_major >= 19:
+        raise PipelineError(
+            "Installed PyAV 19+ may break faster-whisper's metadata_errors argument. "
+            "Run: cryptovideo asr-setup to install av>=11,<19."
+        )
 
 
 def cmd_transcribe(args: argparse.Namespace) -> int:
