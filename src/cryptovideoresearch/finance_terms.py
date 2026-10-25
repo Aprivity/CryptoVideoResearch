@@ -12,9 +12,9 @@ from functools import lru_cache
 from pathlib import Path
 
 LEXICON = Path(__file__).resolve().parent / "data" / "finance_entities.json"
-TIMING = re.compile(r"(?m)^((?:\\d{2}:)?\\d{2}:\\d{2}\\.\\d{3})\\s+-->\\s+")
+TIMING = re.compile(r"(?m)^((?:\d{2}:)?\d{2}:\d{2}\.\d{3})\s+-->\s+")
 NUMBER_UNITS = re.compile(
-    r"(?<![A-Za-z0-9])\\d+(?:[,.]\\d+)*\\s*"
+    r"(?<![A-Za-z0-9])\d+(?:[,.]\d+)*\s*"
     r"(?:%|％|亿美元|億美元|万美元|萬美元|基点|基點|bps|[GMTP]W|万亿|萬億|亿美元)"
 )
 
@@ -41,7 +41,7 @@ def candidate_present(text: str, alias: str) -> bool:
 def vtt_cues(content: str) -> list[tuple[str, str]]:
     """Parse time-coded blocks without counting metadata as spoken words."""
     cues = []
-    for block in re.split(r"\\n\\s*\\n", content.replace("\\r\\n", "\\n")):
+    for block in re.split(r"\n\s*\n", content.replace("\r\n", "\n")):
         lines = [line.strip() for line in block.splitlines() if line.strip()]
         for i, line in enumerate(lines):
             timing = TIMING.match(line)
@@ -151,7 +151,7 @@ def context_for_model(review: dict) -> str:
             for item in uncertain
         ))
     lines += ["[辅助提示结束，以下为原始字幕，时间戳与转写文本未改动]", ""]
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 def quality_markdown(review: dict, *, max_items: int = 4) -> list[str]:
