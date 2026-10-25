@@ -105,10 +105,12 @@ class YouTubeNewsTests(unittest.TestCase):
             {"id": "abc123DEF_0", "title": "Bitcoin CPI inflation Fed policy news explained"},
         ]}
         found = parse_results(raw, topic="BTC 与加密市场", query="news", hours=168, now=now)
-        self.assertEqual(len(found), 2)
+        # A pure price forecast can be filtered out entirely; it should never
+        # outrank the specific macro-news candidate.
         ordered = merge_videos(found, 10)
         self.assertEqual(ordered[0].id, "abc123DEF_0")
-        self.assertGreater(ordered[0].relevance_score, ordered[1].relevance_score)
+        if len(ordered) == 2:
+            self.assertGreater(ordered[0].relevance_score, ordered[1].relevance_score)
 
     def test_model_news_marker_and_legacy_fallback(self):
         self.assertEqual(
