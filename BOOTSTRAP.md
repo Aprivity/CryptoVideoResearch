@@ -1,6 +1,6 @@
 # Ubuntu 一键部署（实验功能分支）
 
-本安装器适用于全新 Ubuntu 22.04 / 24.04（x86_64 或 aarch64）。需要网络、sudo/root 权限和 curl；安装完成后在终端安全输入 DeepSeek API Key。不会自动登录 YouTube，也不会创建后台定时任务或进行交易。
+本安装器适用于全新 Ubuntu 22.04 / 24.04 / 26.04（x86_64 或 aarch64）。需要网络、sudo/root 权限和 curl；安装完成后在终端安全输入 DeepSeek API Key。不会自动登录 YouTube，也不会创建后台定时任务或进行交易。
 
 ## 只需执行一条命令
 
