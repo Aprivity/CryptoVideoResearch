@@ -17,6 +17,17 @@ from .pipeline import (
 
 ASR_MODELS = ("tiny", "base", "small", "medium")
 ASR_DEVICES = ("cpu", "cuda")
+
+
+def installed_pyav_major() -> int | None:
+    """Read installed PyAV version without importing its native audio codecs."""
+    from importlib.metadata import PackageNotFoundError, version
+    try:
+        return int(version("av").split(".", 1)[0])
+    except (PackageNotFoundError, ValueError):
+        return None
+
+
 AUDIO_EXTS = ("m4a", "webm", "opus", "mp3", "aac", "ogg")
 MAX_AUDIO_MIB = 250
 
@@ -157,6 +168,13 @@ def transcribe_audio(audio: Path, target: Path, *, model: str = "small",
                 "Local ASR model download needs HTTPX SOCKS support. "
                 "Run: ./.venv/bin/python -m pip install 'httpx[socks]' "
                 "or rerun cryptovideo asr-setup after updating the project."
+            ) from exc
+        if isinstance(exc, TypeError) and "metadata_errors" in message and "open()" in message:
+            raise PipelineError(
+                "Incompatible faster-whisper / PyAV audio decoder: "
+                "installed PyAV 19+ removed av.open(metadata_errors=...). "
+                "Run: cryptovideo asr-setup (installs compatible av>=11,<19). "
+                "The downloaded audio is preserved for retry."
             ) from exc
         raise PipelineError(f"Local ASR failed: {exc}") from exc
 
