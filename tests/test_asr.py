@@ -1,6 +1,7 @@
 """V0.7 local ASR tests: mocked audio and Whisper; no model downloads or network."""
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -67,6 +68,56 @@ class ASRTests(unittest.TestCase):
             self.assertIn("00:00:08.500", dest.read_text(encoding="utf-8"))
             self.assertFalse((root / "local-asr-small.vtt.tmp").exists())
             self.assertIsNone(prefer_caption(root))  # ASR must not masquerade as native subtitle
+
+    def test_legacy_socks_proxy_normalized_only_during_whisper_model_load(self):
+        from cryptovideoresearch.asr import PROXY_ENV_KEYS
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            audio = root / "audio.m4a"
+            audio.write_bytes(b"A" * 2048)
+            recorded = {}
+            class FakeWhisper:
+                def __init__(self, *args, **kwargs):
+                    recorded.update({key: os.environ.get(key) for key in PROXY_ENV_KEYS})
+                def transcribe(self, path, **kwargs):
+                    return iter([types.SimpleNamespace(
+                        start=0, end=12.0, text=GOOD_TEXT,
+                    )]), types.SimpleNamespace(language="zh")
+            originals = {
+                "HTTP_PROXY": "socks://127.0.0.1:7890",
+                "https_proxy": "SoCkS://localhost:7890",
+                "ALL_PROXY": "socks://user:pass@127.0.0.1:7891",
+                "NO_PROXY": "localhost,127.0.0.1",
+            }
+            with patch.dict(os.environ, originals), \
+                 patch.dict(sys.modules, {"faster_whisper":
+                                         types.SimpleNamespace(WhisperModel=FakeWhisper)}), \
+                 patch("cryptovideoresearch.asr.model_cache_dir",
+                       return_value=root / "whisper-models"):
+                dest = transcribe_audio(audio, root / "local-asr-small.vtt")
+                for key in originals:
+                    self.assertEqual(os.environ[key], originals[key])
+            self.assertTrue(valid_vtt(dest))
+            self.assertEqual(recorded["HTTP_PROXY"], "socks5://127.0.0.1:7890")
+            self.assertEqual(recorded["https_proxy"], "socks5://localhost:7890")
+            self.assertEqual(recorded["ALL_PROXY"], "socks5://user:pass@127.0.0.1:7891")
+
+    def test_proxy_environment_restored_after_whisper_download_failure(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            audio = root / "audio.m4a"
+            audio.write_bytes(b"A" * 2048)
+            class FakeWhisper:
+                def __init__(self, *args, **kwargs):
+                    self.check = os.environ["HTTPS_PROXY"]
+                    self.asserted = self.check
+                    raise ValueError("network failure")
+            with patch.dict(os.environ, {"HTTPS_PROXY": "socks://127.0.0.1:7890"}), \
+                 patch.dict(sys.modules, {"faster_whisper":
+                                         types.SimpleNamespace(WhisperModel=FakeWhisper)}):
+                with self.assertRaises(PipelineError):
+                    transcribe_audio(audio, root / "local-asr-small.vtt")
+                self.assertEqual(os.environ["HTTPS_PROXY"], "socks://127.0.0.1:7890")
 
     def test_download_uses_only_audio_and_browser_cookies(self):
         with tempfile.TemporaryDirectory() as folder:
