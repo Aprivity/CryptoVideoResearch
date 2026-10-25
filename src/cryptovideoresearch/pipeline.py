@@ -12,8 +12,13 @@ from urllib.parse import parse_qs, urlsplit
 from .config import DEFAULT_MODEL, make_model_env
 
 VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
-LANGUAGE_ORDER = ("zh-Hans", "zh-Hant", "zh", "en-orig", "en")
-SUB_LANGS = ",".join(LANGUAGE_ORDER)
+# YouTube uses many regional and auto-translated language tags.
+# "--sub-langs" supports regex, unlike the old fixed five-language allowlist.
+LANGUAGE_ORDER = (
+    "zh-Hans", "zh-CN", "zh-Hant", "zh-TW", "zh-HK", "zh-SG", "zh",
+    "en-orig", "en-US", "en-GB", "en",
+)
+SUB_LANGS = "zh.*,en.*"
 
 
 class PipelineError(RuntimeError):
@@ -133,7 +138,11 @@ def extract_captions(
         found = prefer_caption(target)
         if found is not None:
             return found, mode
-    note = "; ".join(errors)[-1600:] if errors else "No downloadable matching captions"
+    note = "; ".join(errors)[-1600:] if errors else (
+        "yt-dlp exited successfully but returned no valid zh*/en* VTT subtitles; "
+        "the uploader may not provide captions, YouTube may not offer auto-captions, "
+        "or subtitles may be restricted"
+    )
     raise PipelineError(
         "No valid complete subtitle file was obtained; the YouTube description "
         "will NOT be sent to the model. Check video captions, proxy, cookies. " + note
