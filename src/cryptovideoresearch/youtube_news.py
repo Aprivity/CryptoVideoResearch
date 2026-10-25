@@ -80,9 +80,16 @@ def parse_results(raw: dict, *, topic: str, query: str, hours: int, now: datetim
             continue
         published = _date(entry)
         if published:
-            dt = datetime.fromisoformat(published)
-            if dt < cutoff or dt > now + timedelta(hours=24):
-                continue
+            # A YYYY-MM-DD upload date carries no timezone/time-of-day.
+            # Compare dates to dates; never pretend it is midnight UTC.
+            if len(published) == 10:
+                dt_date = datetime.fromisoformat(published).date()
+                if dt_date < cutoff.date() or dt_date > (now + timedelta(hours=24)).date():
+                    continue
+            else:
+                dt = datetime.fromisoformat(published)
+                if dt < cutoff or dt > now + timedelta(hours=24):
+                    continue
         lower = title.casefold()
         relevant = sum(token in lower for token in TOPIC_TERMS.get(topic, ()))
         news = sum(token in lower for token in NEWS_TERMS)
@@ -99,7 +106,7 @@ def parse_results(raw: dict, *, topic: str, query: str, hours: int, now: datetim
             id=vid, title=title[:300], channel=channel[:150],
             url=f"https://www.youtube.com/watch?v={vid}", topic=topic,
             published_at_utc=published, duration_seconds=duration, views=views,
-            relevance_score=score, time_status="provided-by-youtube" if published else "unknown",
+            relevance_score=score, time_status=("date-only" if published and len(published) == 10 else "timestamp") if published else "unknown",
             matched_queries=[query],
         ))
     return output
@@ -194,7 +201,7 @@ def render(output: Path, videos: list[Video], *, new_count: int,
         "", "> YouTube 搜索结果是视频线索；发布时间可能未知。标题与博主解读均不代表已核实的市场事实。", "",
     ]
     for index, video in enumerate(videos, start=1):
-        time_label = video.published_at_utc or "未知（不能确认是否最新）"
+        time_label = (video.published_at_utc + "（仅日期）") if video.time_status == "date-only" else (video.published_at_utc or "未知（不能确认是否最新）")
         duration = str(video.duration_seconds) + " 秒" if video.duration_seconds is not None else "未知"
         lines += [
             f"{index}. [{video.title.replace(chr(10), ' ')}]({video.url})",
