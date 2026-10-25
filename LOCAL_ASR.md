@@ -120,3 +120,46 @@ git pull --ff-only
 ```
 
 `transcribe` 不调用 DeepSeek；已下载的音频文件在首次模型下载失败后会保留并复用。注意 `socks5://` 是代理协议指定，不是代理一定可用的证据：如果后续报连接超时、证书、Hub 下载地址被阻断等，需另外检查本地代理实际连通性。绝不要为排障关闭 HTTPS 证书验证。
+
+## 七、pip 报 Missing dependencies for SOCKS support
+
+若执行 `cryptovideo asr-setup` 时，在 `Installing build dependencies` 阶段报：
+
+```text
+ERROR: Could not install packages due to an OSError:
+Missing dependencies for SOCKS support.
+```
+
+这是 **pip 自己缺少 PySocks 依赖**，不等于 `faster-whisper` 不兼容。旧安装器虽然把 `socks://` 改成 `socks5://`，但无法解决 pip 的引导依赖问题。
+
+最新版 `asr-setup` 改为直接安装 `faster-whisper` 和 `httpx[socks]`，无需对本项目重复执行隔离式 editable 构建。如果本机尚未安装 PySocks，但本地代理配置是 `socks://127.0.0.1:7890`，安装器会在 **pip 子进程中临时尝试** `http://127.0.0.1:7890`；这要求该端口支持 HTTP CONNECT（例如代理软件的 mixed-port）。**并不是所有 SOCKS 端口都支持 HTTP**。
+
+建议先执行：
+
+```bash
+cd ~/CryptoVideoResearch
+git pull --ff-only
+./.venv/bin/cryptovideo asr-setup
+```
+
+如果代理服务没有在 7890 提供 HTTP/mixed 服务，就在本地代理客户端中查找实际 HTTP/mixed 监听端口，例如 7891（**仅示例，不代表你的端口**），运行：
+
+```bash
+./.venv/bin/cryptovideo asr-setup --pip-proxy http://127.0.0.1:7891
+```
+
+`--pip-proxy` 只接受 HTTP(S) 代理，不接受 SOCKS；它仅作用于 pip 安装子进程。可以先验证一个端口是否为可用的 HTTP/mixed 代理：
+
+```bash
+curl --max-time 10 -I --proxy http://127.0.0.1:7890 https://pypi.org/simple/pysocks/
+```
+
+看到来自 PyPI 的 HTTP 响应，才说明这个 HTTP 代理配置可能可用。若提示 `Could not connect` 或 `Proxy CONNECT aborted`，应使用实际的 HTTP/mixed 端口而不是反复盲试。请勿关闭 TLS 证书校验。
+
+完成依赖安装后，再运行不调用 DeepSeek 的本地转写：
+
+```bash
+./.venv/bin/cryptovideo transcribe \
+  'https://www.youtube.com/watch?v=DiDuGTf_-0g' \
+  --cookies chrome --asr-model base --output-dir ./outputs/asr-validation
+```
