@@ -1,5 +1,30 @@
 # CryptoVideoResearch
 
+## V0.8 · 双层报告 + 金融术语质量检查
+
+**新增两个功能，沿用原有一次 DeepSeek 调用：**
+
+- 同时生成 `quick.md`（1 分钟内可浏览的 3–5 条主要事件/观点，标注未核验可信度）和 `analysis.md`（完整的事件、观点、时间戳、数据及待核查问题）。
+- 自动识别 CoreWeave、Goldman Sachs、Bernstein、American Express、Micron、NVIDIA 等英文/中文金融实体，标注 `康衛覆`、`Wigs` 等疑似 ASR 错误；用 `finance_quality.json` 保留时间戳与核对理由。词典置信提示**不是 Whisper 声学概率，也不是事实核验**。
+
+旧 `analysis.md` 可用 `cryptovideo upgrade-report <analysis.md>` 离线补出速览和质量文件；再次进行 DeepSeek 分析时会按重要性直接生成模型精选版速览。原始 VTT 不变，不额外请求模型。详细说明：[V08_DUAL_REPORTS.md](V08_DUAL_REPORTS.md)。
+
+```bash
+# 从 V0.7 更新
+git fetch origin
+git switch --track origin/feat/v0.8-dual-reports-finance-terms
+# 已在该分支则 git pull --ff-only
+
+# 为之前实际跑通的单视频报告增加摘要：零 DeepSeek 调用
+./.venv/bin/cryptovideo upgrade-report outputs/asr-validation/DiDuGTf_-0g/analysis.md
+
+# 开始正常 B 模块
+bash run.sh
+```
+
+---
+
+
 ## V0.7 · 本地 ASR 语音转写回退
 
 B 模块现在可以在 **YouTube 原生字幕不可用时，选择性使用本地 `faster-whisper` 将单视频音频转成带时间戳的 VTT，再用 DeepSeek 生成原有的独立报告**。本地语音识别不按分钟收取云端转写费用；DeepSeek 视频分析仍调用网络 API。详细说明见 [LOCAL_ASR.md](LOCAL_ASR.md)。
