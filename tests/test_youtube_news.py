@@ -11,7 +11,8 @@ from unittest.mock import patch
 
 from cryptovideoresearch.cli import build_parser
 from cryptovideoresearch.youtube_news import (
-    classify_report, find_videos, main, merge_videos, parse_results, verify_video_dates,
+    classify_report, find_videos, main, merge_videos, old_title_date,
+    parse_results, verify_video_dates,
 )
 
 FIXTURE = Path(__file__).parent / "fixtures/youtube_search.json"
@@ -126,6 +127,33 @@ class YouTubeNewsTests(unittest.TestCase):
             "no-news",
         )
         self.assertEqual(classify_report("## 核心观点\\n某些观点"), "unclassified")
+
+    def test_old_dates_in_titles_are_filtered_without_inventing_upload_date(self):
+        now = datetime(2026, 10, 25, 10, tzinfo=timezone.utc)
+        cases = [
+            ("【精華】CPI 20230731 美聯儲", "2023-07-31"),
+            ("台積電 20230606 AI news", "2023-06-06"),
+            ("科技回顧 20220810", "2022-08-10"),
+            ("市場觀察 2026.7.25", "2026-07-25"),
+            ("銀行危機｜20230314", "2023-03-14"),
+            ("10月25日 加密新聞", None),
+            ("2026.10.24 今日 CPI", None),
+        ]
+        for title, expected in cases:
+            with self.subTest(title=title):
+                self.assertEqual(old_title_date(title, now=now, hours=168), expected)
+
+        data = {"entries": [
+            {"id": "ZWrgUWKOq_0", "title": "美联储新闻 20230731", "duration": 500},
+            {"id": "abc123DEF_0", "title": "CPI 通胀 最新财经解读", "duration": 500},
+            {"id": "abcdefghijk", "title": "20230731 CPI 历史比较", "duration": 500,
+             "upload_date": "20261024"},
+        ]}
+        found = parse_results(data, topic="美联储与宏观", query="news",
+                              now=now, hours=168)
+        self.assertEqual({v.id for v in found}, {"abc123DEF_0", "abcdefghijk"})
+        recent = next(v for v in found if v.id == "abcdefghijk")
+        self.assertEqual(recent.published_at_utc, "2026-10-24")
 
     def test_corrupted_fixture_preserves_existing_report(self):
         with tempfile.TemporaryDirectory() as folder:
