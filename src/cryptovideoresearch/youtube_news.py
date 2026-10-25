@@ -334,8 +334,12 @@ def remember(path: Path, videos: list[Video]) -> int:
 def render(output: Path, videos: list[Video], *, new_count: int,
            errors: list[str], requested: int, analyzed: list[dict]) -> None:
     output.mkdir(parents=True, exist_ok=True)
+    verified_date_count = sum(video.published_at_utc is not None for video in videos)
+    unknown_date_count = len(videos) - verified_date_count
     payload = {
         "schema_version": "0.4-youtube-news-preview",
+        "verified_date_count": verified_date_count,
+        "unknown_date_count": unknown_date_count,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "source": "youtube-search",
         "requested_queries": requested,
@@ -352,6 +356,9 @@ def render(output: Path, videos: list[Video], *, new_count: int,
     lines = [
         "# YouTube 市场新闻视频候选（未核实）", "",
         f"生成（UTC）：{payload['generated_at_utc']}｜视频：{len(videos)} 条｜本轮首次发现：{new_count} 条",
+        f"日期已确认：{verified_date_count} 条｜发布日期未知：{unknown_date_count} 条",
+        "",
+        "> 注意：未知发布日期的视频不等于最近七天的新视频；--hours 只能过滤已知日期。",
         "", "> YouTube 搜索结果是视频线索；发布时间可能未知。标题与博主解读均不代表已核实的市场事实。", "",
     ]
     for index, video in enumerate(videos, start=1):
