@@ -164,35 +164,30 @@ curl --max-time 10 -I --proxy http://127.0.0.1:7890 https://pypi.org/simple/pyso
   --cookies chrome --asr-model base --output-dir ./outputs/asr-validation
 ```
 
-## 八、PyAV `metadata_errors` 与 faster-whisper 解码兼容性（2026-10）
+## 八、Python 3.14 / PyAV 19 与 faster-whisper 1.2.1 兼容性
 
-真实语音转写中可能出现：
+Ubuntu 若已安装 `av==19.0.2` 和 `faster-whisper==1.2.1`，转写可能遇到：
 
 ```text
 Local ASR failed: open() got an unexpected keyword argument 'metadata_errors'
 ```
 
-这不是 Hugging Face API token 问题（`HF_TOKEN` 仅影响下载配额），而是已知的 **faster-whisper 1.2.1 与 PyAV 19.x** 兼容性问题：旧解码器调用 `av.open(..., metadata_errors="ignore")`，PyAV 19 移除了这个参数。对应上游修复议题：https://github.com/SYSTRAN/faster-whisper/issues/1589 。
+这是旧版 faster-whisper 传入了 PyAV 19 已移除的 `metadata_errors` 参数。官方已在源代码中通过按 PyAV 版本选择参数修复，但 1.2.1 发布版仍可能遇到问题。上游参考：https://github.com/SYSTRAN/faster-whisper/issues/1589 和 https://github.com/SYSTRAN/faster-whisper/blob/master/faster_whisper/audio.py 。
 
-V0.7 目前使用可选依赖约束 `av>=11,<19`；`asr-setup` 已修改为**即使 faster-whisper 和 SOCKS 依赖都存在，也会检查 PyAV 版本**。发现 19+ 时重新安装兼容版本。更新源码后执行：
+**本项目现使用局部兼容适配层，不需要下载或降级 PyAV。** 在实际 ASR 解码期间，只对旧调用删除该关键字参数，其余参数原样传递；转写结束或失败时恢复原始 `av.open`。不修改已安装库，也不改变其他进程。
+
+如果日志中尝试 `pip install av<19` 但出现 `Temporary failure in name resolution`，这是 pip 包源 DNS/网络无法连通，不能据此断言 PyAV 无兼容版本。对于你已经装好 PyAV 19 的环境，优先更新源码并重新运行；无需再执行 `asr-setup`：
 
 ```bash
 cd ~/CryptoVideoResearch
 git pull --ff-only
-./.venv/bin/python -m pip show av faster-whisper
 ./.venv/bin/cryptovideo asr-setup
-./.venv/bin/python -m pip show av faster-whisper
-```
-
-如 pip 仍受本地 SOCKS 代理影响，使用前文提供的 `--pip-proxy http://127.0.0.1:<HTTP_PORT>`，端口必须实际支持 HTTP/mixed 服务。你也可以在 pip 能访问依赖源的环境中直接执行 `./.venv/bin/python -m pip install 'av>=11,<19'`。
-
-然后重试无需调用 DeepSeek 的本地语音识别：
-
-```bash
 ./.venv/bin/cryptovideo transcribe \
   'https://www.youtube.com/watch?v=DiDuGTf_-0g' \
   --cookies chrome --asr-model base \
   --output-dir ./outputs/asr-validation
 ```
 
-转写失败前保留的音频可以被复用，通常无需重新下载。只有真正生成了有效 VTT，才说明音频解码和转写成功；在线模型下载成功本身不代表语音识别成功。以后当新版 faster-whisper 已明确兼容 PyAV 19+ 时，再评估移除上限。
+新的 `asr-setup` 在已安装 faster-whisper、PyAV、SOCKS 支持时会直接返回成功，**不调用 pip**。此前下载的音频和模型缓存应被复用，`transcribe` 本身不调用 DeepSeek。
+
+注意兼容适配层的可靠性仍需在 Ubuntu 真实音频测试确认；现有 CI 主要验证了适配层参数处理、恢复现场及转写流程，不等于已经在你的机器上完成验收。
