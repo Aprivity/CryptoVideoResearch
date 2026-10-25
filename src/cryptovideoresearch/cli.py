@@ -160,12 +160,6 @@ def cmd_youtube_news(args: argparse.Namespace) -> int:
         output = Path(args.output).expanduser() if args.output else root / "outputs" / "youtubers" / channel_slug(url)
     else:
         url = None
-        if args.channel:
-        from .channels import normalize_channel, channel_slug
-        url = normalize_channel(args.channel)
-        output = Path(args.output).expanduser() if args.output else root / "outputs" / "youtubers" / channel_slug(url)
-    else:
-        url = None
         output = Path(args.output).expanduser() if args.output else root / "outputs/youtube-news"
     argv = [
         "--config", str(config), "--output", str(output),
@@ -197,7 +191,13 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     root = Path(__file__).resolve().parents[2]
     config = Path(args.config).expanduser() if args.config else root / "youtube_news_queries.json"
-    output = Path(args.output).expanduser() if args.output else root / "outputs/youtube-news"
+    if args.channel:
+        from .channels import normalize_channel, channel_slug
+        url = normalize_channel(args.channel)
+        output = Path(args.output).expanduser() if args.output else root / "outputs" / "youtubers" / channel_slug(url)
+    else:
+        url = None
+        output = Path(args.output).expanduser() if args.output else root / "outputs/youtube-news"
     argv = [
         "--config", str(config), "--output", str(output),
         "--hours", str(args.hours),
