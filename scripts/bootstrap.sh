@@ -26,8 +26,6 @@ case "$VERSION_ID" in
   *) die "Ubuntu 22.04/24.04/26.04 required; found $VERSION_ID" ;;
 esac
 [[ "$TARGET" == /* && "$TARGET" != "/" ]] || die "Install directory must be absolute and not /"
-command -v curl >/dev/null 2>&1 || die "curl is required for bootstrap"
-command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required for integrity checks"
 
 # Replace a nonstandard proxy scheme without guessing whether its port is HTTP.
 for var in ALL_PROXY all_proxy HTTP_PROXY HTTPS_PROXY http_proxy https_proxy; do
@@ -48,6 +46,9 @@ note "Installing Ubuntu prerequisites (sudo may ask for your password)"
 "${APT[@]}" update
 "${APT[@]}" install -y --no-install-recommends \
   ca-certificates curl git python3 python3-venv python3-pip pipx xz-utils
+
+command -v curl >/dev/null 2>&1 || die "curl is missing after apt installation"
+command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required for integrity checks"
 
 python3 - <<'PY'
 import sys
