@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+from contextlib import contextmanager
 from pathlib import Path
 
 from .pipeline import (
@@ -71,6 +72,38 @@ def format_timestamp(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}.{ms:03d}"
 
 
+
+PROXY_ENV_KEYS = (
+    "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+    "http_proxy", "https_proxy", "all_proxy",
+)
+
+
+@contextmanager
+def compatible_model_download_proxies():
+    """Normalize legacy socks:// to socks5:// only while loading Whisper.
+
+    yt-dlp accepts socks://, whereas HTTPX (used by Hugging Face Hub)
+    requires a specific SOCKS version. Preserve each original env variable,
+    including ALL_PROXY, and restore it even when the download fails.
+    The user controls the proxy; do not change host, port, or credentials.
+    """
+    original: dict[str, str] = {}
+    try:
+        for key in PROXY_ENV_KEYS:
+            value = os.environ.get(key)
+            if value is not None and value.lower().startswith("socks://"):
+                original[key] = value
+                os.environ[key] = "socks5://" + value[len("socks://"):]
+        if original:
+            print("[ASR] Normalized legacy SOCKS proxy scheme for model download "
+                  "(temporary; original environment will be restored)", flush=True)
+        yield
+    finally:
+        for key, value in original.items():
+            os.environ[key] = value
+
+
 def transcribe_audio(audio: Path, target: Path, *, model: str = "small",
                      device: str = "cpu") -> Path:
     """Decode using PyAV, transcribe locally with faster-whisper, save VTT atomically."""
@@ -87,11 +120,12 @@ def transcribe_audio(audio: Path, target: Path, *, model: str = "small",
     root = model_cache_dir()
     root.mkdir(parents=True, exist_ok=True)
     try:
-        whisper = WhisperModel(
-            model, device=device,
-            compute_type="int8" if device == "cpu" else "float16",
-            download_root=str(root),
-        )
+        with compatible_model_download_proxies():
+            whisper = WhisperModel(
+                model, device=device,
+                compute_type="int8" if device == "cpu" else "float16",
+                download_root=str(root),
+            )
         segments, _ = whisper.transcribe(
             str(audio), beam_size=5, vad_filter=True,
             condition_on_previous_text=False,
@@ -108,6 +142,15 @@ def transcribe_audio(audio: Path, target: Path, *, model: str = "small",
                 text, "",
             ])
     except (OSError, RuntimeError, ValueError, TypeError) as exc:
+        message = str(exc)
+        if ("Using SOCKS proxy" in message and "socksio" in message) or (
+            "socksio" in message and "not installed" in message
+        ):
+            raise PipelineError(
+                "Local ASR model download needs HTTPX SOCKS support. "
+                "Run: ./.venv/bin/python -m pip install 'httpx[socks]' "
+                "or rerun cryptovideo asr-setup after updating the project."
+            ) from exc
         raise PipelineError(f"Local ASR failed: {exc}") from exc
 
     target.parent.mkdir(parents=True, exist_ok=True)
