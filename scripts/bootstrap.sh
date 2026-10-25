@@ -4,7 +4,7 @@
 set -Eeuo pipefail
 
 APP="CryptoVideoResearch"
-BRANCH="${CVR_BRANCH:-feat/v0.7-local-asr}"
+BRANCH="${CVR_BRANCH:-feat/v0.8-dual-reports-finance-terms}"
 REPO="https://github.com/Aprivity/CryptoVideoResearch.git"
 TARGET="${CVR_INSTALL_DIR:-$HOME/CryptoVideoResearch}"
 LOCAL_BIN="$HOME/.local/bin"
