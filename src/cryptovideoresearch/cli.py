@@ -201,6 +201,22 @@ def require_asr_runtime() -> None:
         raise PipelineError("PyAV is not installed. Run: cryptovideo asr-setup")
 
 
+def cmd_upgrade_report(args: argparse.Namespace) -> int:
+    """Upgrade an existing analysis to V0.8 companions with zero model calls."""
+    from .report_outputs import backfill_cached_report
+    report = Path(args.report).expanduser().resolve()
+    if report.name != "analysis.md" or not report.is_file():
+        raise PipelineError("Provide an existing per-video analysis.md path")
+    paths = backfill_cached_report(report)
+    if not paths.get("quick_file"):
+        raise PipelineError("Could not create a quick report from this analysis file")
+    print(f"[OK] Existing analysis preserved: {report}")
+    print(f"[OK] 1-minute summary: {paths['quick_file']}")
+    print(f"[OK] Financial term quality: {paths['finance_quality_file']}")
+    print("[INFO] No DeepSeek calls were made.")
+    return 0
+
+
 def cmd_transcribe(args: argparse.Namespace) -> int:
     """Free-of-DeepSeek subtitle extraction with optional local ASR fallback."""
     from .pipeline import NoCaptionsError
@@ -464,6 +480,9 @@ def build_parser() -> argparse.ArgumentParser:
     ytnews.add_argument("--asr-device", choices=("cpu", "cuda"), default="cpu")
     ytnews.add_argument("--keep-audio", action="store_true", help="Retain source audio after successful ASR")
     ytnews.set_defaults(handler=cmd_youtube_news)
+    upgrade = sub.add_parser("upgrade-report", help="Add a quick summary and finance review to an existing report without DeepSeek")
+    upgrade.add_argument("report", help="Path to a saved per-video analysis.md")
+    upgrade.set_defaults(handler=cmd_upgrade_report)
     transcribe = sub.add_parser("transcribe", help="Get video captions or local ASR transcript (no DeepSeek call)")
     transcribe.add_argument("url", help="Single YouTube video URL")
     transcribe.add_argument("--cookies", choices=("none", "chrome", "firefox", "chromium", "brave"), default="none")
