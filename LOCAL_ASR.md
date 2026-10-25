@@ -31,12 +31,17 @@ bash run.sh
 ```bash
 cd ~/CryptoVideoResearch
 ./.venv/bin/cryptovideo asr-setup
+# 先免费测试 ASR：只生成 VTT，不调用 DeepSeek
+./.venv/bin/cryptovideo transcribe 'https://www.youtube.com/watch?v=DiDuGTf_-0g' \
+  --cookies chrome --asr-model base \
+  --output-dir ./outputs/asr-validation
+# VTT 验收后再调用 DeepSeek 生成独立报告
 ./.venv/bin/cryptovideo analyze 'https://www.youtube.com/watch?v=DiDuGTf_-0g' \
   --cookies chrome --asr-fallback --asr-model base \
   --output-dir ./outputs/asr-validation
 ```
 
-如果 YouTube 访问正常，程序会尝试 VTT 字幕 → 没有可用字幕 → yt-dlp 下载 **单独音频流**（优先 M4A）→ faster-whisper 本地识别 → 带时间戳 VTT → DeepSeek 总结。报告和转写结果都以本地文件保存。
+如果 YouTube 访问正常，程序会尝试 VTT 字幕 → 没有可用字幕 → yt-dlp 下载 **单独音频流**（优先 M4A）→ faster-whisper 本地识别 → 带时间戳 VTT。上面的 `transcribe` 命令不会调用 DeepSeek；之后再执行 `analyze` 生成中文研究报告，并复用本地 VTT。报告和转写结果都以本地文件保存。
 
 单视频输出示例：
 
