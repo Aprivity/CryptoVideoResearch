@@ -311,13 +311,24 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
     prompt = Path(__file__).resolve().parents[2] / "prompts/youtube_news_zh.md"
     folder = output / "videos"
     results: list[dict] = []
-    for video in videos[:n]:
+    completed = 0
+    model_attempts = 0
+    # Try replacements if captions fail; never exceed N model API attempts.
+    max_candidates = min(len(videos), max(n * 3, n + 2))
+    for video in videos[:max_candidates]:
+        if completed >= n:
+            break
         target = folder / video.id / "analysis.md"
         if target.is_file() and not refresh:
             results.append({"video_id": video.id, "status": "cached", "analysis_file": str(target)})
+            completed += 1
             continue
         try:
             transcript, source = extract_captions(video.url, folder, cookies=cookies, refresh=refresh)
+            if model_attempts >= n:
+                errors.append(f"Model call limit ({n}) reached; remaining videos skipped.")
+                break
+            model_attempts += 1
             summary = analyze_transcript(transcript, model=model or DEFAULT_MODEL, prompt=prompt)
             report = write_report(
                 output_root=folder, video_id=video.id,
@@ -326,6 +337,7 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
                 model=model or DEFAULT_MODEL,
             )
             results.append({"video_id": video.id, "status": "analyzed", "analysis_file": str(report)})
+            completed += 1
         except (PipelineError, OSError, ValueError, RuntimeError) as exc:
             msg = f"{video.id} analysis failed: {exc}"
             errors.append(msg[:300])
