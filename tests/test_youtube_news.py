@@ -59,6 +59,8 @@ class YouTubeNewsTests(unittest.TestCase):
             first = json.loads((Path(folder) / "latest.json").read_text(encoding="utf-8"))
             self.assertEqual(len(first["videos"]), 2)
             self.assertEqual(first["discovery_new"], 2)
+            self.assertEqual(first["verified_date_count"], 1)
+            self.assertEqual(first["unknown_date_count"], 1)
             self.assertEqual(args.handler(args), 0)
             second = json.loads((Path(folder) / "latest.json").read_text(encoding="utf-8"))
             self.assertEqual(second["discovery_new"], 0)
