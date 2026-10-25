@@ -12,8 +12,8 @@ from unittest.mock import patch
 
 from cryptovideoresearch.config import load_key, save_key, make_model_env
 from cryptovideoresearch.pipeline import (
-    PipelineError, analyze_transcript, extract_captions, valid_vtt,
-    write_report, youtube_video_id,
+    PipelineError, YouTubeAccessError, analyze_transcript, checked_run,
+    extract_captions, valid_vtt, write_report, youtube_video_id,
 )
 
 TEST_VTT = (
@@ -76,6 +76,28 @@ class PipelineTests(unittest.TestCase):
                 path, source = extract_captions("https://youtu.be/ZWrgUWKOq_0", Path(directory))
             self.assertEqual(source, "uploaded")
             self.assertTrue(path.name.endswith(".zh-TW.vtt"))
+
+    def test_ytdlp_bot_challenge_has_distinct_error(self):
+        for apostrophe in ("'", "’"):
+            message = (
+                f"ERROR: [youtube] ZWrgUWKOq_0: Sign in to confirm you{apostrophe}re not a bot."
+            )
+            denied = subprocess.CompletedProcess(
+                ["/fake/yt-dlp"], 1, "", message,
+            )
+            with patch("cryptovideoresearch.pipeline.subprocess.run", return_value=denied):
+                with self.assertRaises(YouTubeAccessError) as raised:
+                    checked_run(["/fake/yt-dlp", "--list-subs"], timeout=10)
+            self.assertIn("YouTube requires sign-in/bot verification", str(raised.exception))
+
+    def test_bot_challenge_stops_caption_fallback_after_first_attempt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("cryptovideoresearch.pipeline.find_ytdlp", return_value="/fake/yt-dlp"), \
+                 patch("cryptovideoresearch.pipeline.checked_run",
+                       side_effect=YouTubeAccessError("Sign in to confirm you're not a bot")) as call:
+                with self.assertRaises(YouTubeAccessError):
+                    extract_captions("https://youtu.be/ZWrgUWKOq_0", Path(directory))
+            call.assert_called_once()
 
     def test_analysis_uses_deepseek_and_no_claude(self):
         with tempfile.TemporaryDirectory() as directory:
