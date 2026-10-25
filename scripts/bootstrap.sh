@@ -4,7 +4,7 @@
 set -Eeuo pipefail
 
 APP="CryptoVideoResearch"
-BRANCH="${CVR_BRANCH:-feat/v0.4-youtube-news}"
+BRANCH="${CVR_BRANCH:-feat/v0.5-one-command-reports}"
 REPO="https://github.com/Aprivity/CryptoVideoResearch.git"
 TARGET="${CVR_INSTALL_DIR:-$HOME/CryptoVideoResearch}"
 LOCAL_BIN="$HOME/.local/bin"
@@ -117,13 +117,19 @@ fi
 
 note "Installing project from $BRANCH"
 if [[ -e "$TARGET" ]]; then
-  [[ -d "$TARGET/.git" ]] || die "$TARGET already exists and is not a Git repository"
-  current="$(git -C "$TARGET" branch --show-current)"
-  [[ "$current" == "$BRANCH" ]] || die "Existing checkout is on $current. Not switching branches."
-  if ! git -C "$TARGET" diff --quiet || ! git -C "$TARGET" diff --cached --quiet; then
-    die "Uncommitted changes detected; installer will not overwrite them"
+  if [[ -d "$TARGET/.git" ]]; then
+    current="$(git -C "$TARGET" branch --show-current)"
+    [[ "$current" == "$BRANCH" ]] || die "Existing checkout is on $current. Not switching branches."
+    if ! git -C "$TARGET" diff --quiet || ! git -C "$TARGET" diff --cached --quiet; then
+      die "Uncommitted changes detected; installer will not overwrite them"
+    fi
+    git -C "$TARGET" pull --ff-only origin "$BRANCH"
+  elif [[ -f "$TARGET/pyproject.toml" && -f "$TARGET/src/cryptovideoresearch/cli.py" &&
+          -f "$TARGET/scripts/bootstrap.sh" ]]; then
+    note "Using an existing ZIP/downloaded source directory (no Git history; updates unavailable)"
+  else
+    die "$TARGET already exists and is not a CryptoVideoResearch source checkout"
   fi
-  git -C "$TARGET" pull --ff-only origin "$BRANCH"
 else
   git clone --depth 1 --single-branch --branch "$BRANCH" "$REPO" "$TARGET"
 fi
@@ -156,12 +162,16 @@ note "Running local self-check"
 "$TARGET/.venv/bin/cryptovideo" doctor ||
   warn "Doctor reported missing components; review the output above"
 
-note "Running B: YouTube news video discovery once (no scheduled background monitoring)"
-if "$TARGET/.venv/bin/cryptovideo" youtube-news --hours 168; then
-  note "Report created: $TARGET/outputs/youtube-news/latest.md"
-else
-  warn "YouTube search failed; install succeeded. Retry: cryptovideo youtube-news"
+if [[ "${CVR_SKIP_INITIAL_RUN:-0}" != 1 ]]; then
+  count="${CVR_REPORT_COUNT:-2}"
+  case "$count" in 1|2|3|4|5) ;; *) die "CVR_REPORT_COUNT must be 1..5" ;; esac
+  note "Generating up to $count independent YouTube video reports (paid DeepSeek API calls)"
+  if "$TARGET/.venv/bin/cryptovideo" run --count "$count" --cookies "${CVR_COOKIES:-none}"; then
+    note "Report index: $TARGET/outputs/youtube-news/latest.md"
+  else
+    warn "Video research did not complete; dependencies installed. Retry: cryptovideo run"
+  fi
 fi
 
 note "Ready"
-printf 'Project: %s\nNews videos: cryptovideo youtube-news --hours 168\nVideo: cryptovideo analyze URL --cookies chrome\nStatus: cryptovideo doctor\n' "$TARGET"
+printf 'Project: %s\nOne-command reports: cryptovideo run\nReport index: %s/outputs/youtube-news/latest.md\nStatus: cryptovideo doctor\n' "$TARGET"
