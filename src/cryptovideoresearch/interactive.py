@@ -192,6 +192,9 @@ def launch(channel: Channel | None, config: dict) -> None:
     mode = f"频道：{channel.name}" if channel else "市场新闻"
     print(f"\n运行 B · {mode}")
     print(f"视频范围：{config['hours']} 小时，DeepSeek 最多 {config['count']} 次模型调用")
+    print(f"浏览器 Cookies：{config['cookies']}｜严格日期：{'开启' if config['strict_dates'] else '关闭'}")
+    if config["cookies"] == "none":
+        print("[INFO] 当前匿名访问 YouTube。如果字幕不可用，可在主菜单的「运行设置」中改为 chrome。")
     print("报告按视频独立保存；旧报告保留并复用缓存。")
     args = [
         "run", "--hours", str(config["hours"]),
@@ -207,7 +210,9 @@ def launch(channel: Channel | None, config: dict) -> None:
     try:
         code = command.handler(command)
         if code:
-            print("本轮可能未取得合格视频报告，请检查上方提示。")
+            print("本轮未完成有效视频报告，请检查上方的 [FAIL]/[HINT] 和 latest.md。")
+            if config["cookies"] == "none":
+                print("当前未使用浏览器 Cookies；可以返回「运行设置」选择 chrome 后重试。")
     except (RuntimeError, OSError, ValueError) as exc:
         print(f"运行失败：{exc}")
     pause()
