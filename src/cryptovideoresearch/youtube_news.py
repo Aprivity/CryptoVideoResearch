@@ -381,7 +381,7 @@ def render(output: Path, videos: list[Video], *, new_count: int,
             f"   - 匹配检索：{'; '.join(video.matched_queries)}",
         ]
     if analyzed:
-        lines += ["", "## 已提取的视频观点（摘要仍未事实核验）", ""]
+        lines += ["", "## 视频处理状态（摘要仍未事实核验）", ""]
         for item in analyzed:
             path = item.get("analysis_file") or "—"
             kind = item.get("classification", "unknown")
@@ -431,7 +431,15 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
     # A few attractive headlines may have no YouTube captions at all.
     # Search deeper rather than quitting after 3 misses for --count 1.
     max_candidates = min(len(videos), max(n * 10, n + 2))
-    for video in videos[:max_candidates]:
+    # Creator uploads stay chronological in latest.md, but analysis tries
+    # known-caption/unknown-caption videos before tracks declared missing.
+    # This avoids spending the per-run probe budget on avoidable failures.
+    candidates = (
+        sorted(videos, key=lambda v: {"available": 0, "unknown": 1, "none": 2}.get(v.caption_status, 1))
+        if accept_no_news else videos
+    )
+    forced_caption_probes = 0
+    for video in candidates[:max_candidates]:
         if completed >= n:
             break
         target = folder / video.id / "analysis.md"
@@ -444,9 +452,13 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
                 completed += 1
             continue
         if video.caption_status == "none":
-            errors.append(f"{video.id}: YouTube metadata reports no downloadable zh/en VTT caption tracks")
-            results.append({"video_id": video.id, "status": "no-captions"})
-            continue
+            # Metadata is only a hint. For a specifically chosen creator,
+            # probe a bounded number of 'none' videos before giving up.
+            if not accept_no_news or forced_caption_probes >= max(1, n):
+                errors.append(f"{video.id}: YouTube metadata lists no downloadable zh/en VTT captions")
+                results.append({"video_id": video.id, "status": "no-captions"})
+                continue
+            forced_caption_probes += 1
         if model_attempts >= n:
             errors.append(f"Model call limit ({n}) reached; further paid analysis was not attempted.")
             break
@@ -468,8 +480,13 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
                 completed += 1
         except (PipelineError, OSError, ValueError, RuntimeError) as exc:
             msg = f"{video.id} analysis failed: {exc}"
-            errors.append(msg[:300])
-            results.append({"video_id": video.id, "status": "failed"})
+            errors.append(msg[:500])
+            if isinstance(exc, PipelineError) and "No valid complete subtitle file" in str(exc):
+                status = "no-captions"
+            else:
+                status = "failed"
+            results.append({"video_id": video.id, "status": status})
+            print(f"[WARN] {video.id}: {str(exc)[:160]}", file=sys.stderr)
     return results
 
 
@@ -577,8 +594,21 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[PASS] videos={len(videos)} new={new_count} reports={useful} no_news={no_news} analyzed={sum(a['status'] == 'analyzed' for a in analyzed)} cached={sum(a['status'] == 'cached' for a in analyzed)}")
     print(f"Report: {output / 'latest.md'}")
     if args.analyze_top and useful == 0:
-        print("[WARN] No eligible video report was completed; "
-              "no-news reports, if any, were preserved. See latest.md.", file=sys.stderr)
+        subtitle_failures = sum(a['status'] == 'no-captions' for a in analyzed)
+        other_failures = sum(a['status'] == 'failed' for a in analyzed)
+        print(f"[FAIL] No report generated: {subtitle_failures} videos without usable captions, "
+              f"{other_failures} other analysis failures, "
+              f"{len(candidates_for_analysis)} eligible candidates.", file=sys.stderr)
+        if not candidates_for_analysis:
+            print("[HINT] Check video publication dates; --strict-dates may exclude every video.",
+                  file=sys.stderr)
+        elif subtitle_failures and not other_failures:
+            print("[HINT] YouTube may not provide downloadable captions for these uploads. "
+                  "Try another signed-in browser or inspect --list-subs; "
+                  "audio transcription (ASR) is not yet part of this workflow.",
+                  file=sys.stderr)
+        if errors:
+            print("[HINT] First error details:", errors[0][:300], file=sys.stderr)
         return 1
     return 0
 
