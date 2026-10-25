@@ -171,6 +171,46 @@ def cmd_youtube_news(args: argparse.Namespace) -> int:
     return run_youtube_news(argv)
 
 
+def cmd_run(args: argparse.Namespace) -> int:
+    """One-command discovery plus separate reports for a bounded number of videos."""
+    # A single invocation deliberately limits paid model analysis to 1..5
+    # successful/cached reports. Never repeat paid work when a report exists.
+    if args.count > 0:
+        load_key()  # Fail before YouTube requests if no DeepSeek key.
+    from .youtube_news import main as run_youtube_news
+
+    root = Path(__file__).resolve().parents[2]
+    config = Path(args.config).expanduser() if args.config else root / "youtube_news_queries.json"
+    output = Path(args.output).expanduser() if args.output else root / "outputs/youtube-news"
+    argv = [
+        "--config", str(config), "--output", str(output),
+        "--hours", str(args.hours),
+        "--per-query", str(args.per_query),
+        "--max-results", str(args.max_results),
+        "--verify-top", str(args.verify_top),
+        "--analyze-top", str(args.count),
+        "--cookies", args.cookies,
+    ]
+    if args.count and not args.strict_dates:
+        # First ask YouTube for actual upload dates; when the platform omits
+        # them, the report still labels such videos "unknown".
+        print("[NOTICE] Videos without a verified upload date can be analyzed; "
+              "their age and news claims remain unverified.")
+        argv.append("--allow-unknown-age")
+    if args.refresh:
+        argv.append("--refresh")
+    if args.model:
+        argv.extend(["--model", args.model])
+    if args.fixture:
+        argv.extend(["--fixture", args.fixture])
+    code = run_youtube_news(argv)
+    if code == 0:
+        print(f"\nVideo candidate index: {output / 'latest.md'}")
+        for report in sorted((output / "videos").glob("*/analysis.md")):
+            print(f"Video report: {report}")
+    return code
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cryptovideo",
@@ -207,6 +247,22 @@ def build_parser() -> argparse.ArgumentParser:
     ytnews.add_argument("--fixture", help="Offline YouTube search JSON fixture")
     ytnews.add_argument("--refresh", action="store_true", help="Re-analyze existing summaries")
     ytnews.set_defaults(handler=cmd_youtube_news)
+    run = sub.add_parser("run", help="One command: search YouTube and generate separate AI video reports")
+    run.add_argument("--count", type=int, choices=range(1, 6), default=2,
+                     metavar="{1..5}", help="Number of successful/cached reports to produce (default 2)")
+    run.add_argument("--hours", type=int, default=168, help="Recency window (default 7 days)")
+    run.add_argument("--verify-top", type=int, default=10, help="Check upload dates for top N search results")
+    run.add_argument("--per-query", type=int, default=8)
+    run.add_argument("--max-results", type=int, default=20)
+    run.add_argument("--cookies", choices=("none", "chrome", "firefox", "chromium", "brave"), default="none")
+    run.add_argument("--strict-dates", action="store_true",
+                     help="Only analyze videos confirmed to be in the requested time window")
+    run.add_argument("--refresh", action="store_true", help="Re-run DeepSeek for existing reports")
+    run.add_argument("--model", help="Override model used for video analysis")
+    run.add_argument("--config", help="Custom YouTube search configuration")
+    run.add_argument("--output", help="Custom report directory")
+    run.add_argument("--fixture", help="Offline search fixture (for developer testing)")
+    run.set_defaults(handler=cmd_run)
     for command in ("analyze", "analyze-file"):
         p = sub.add_parser(command, help="Analyze a YouTube URL or an existing transcript")
         if command == "analyze":
