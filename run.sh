@@ -4,6 +4,7 @@
 # Subsequent executions search YouTube and produce individual reports.
 set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PATH="$HOME/.local/bin:$PATH"
 
 if [[ ! -x "$ROOT/.venv/bin/cryptovideo" ]]; then
   echo "[CryptoVideoResearch] First start: installing required components ..."
