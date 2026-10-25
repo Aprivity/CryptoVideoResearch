@@ -27,7 +27,8 @@ TOPIC_TERMS = {
 }
 NEWS_TERMS = ("新闻", "最新", "快讯", "市场", "解读", "分析", "走势", "突发",
               "news", "market", "breaking", "update", "fed", "财报")
-HYPE_TERMS = ("暴富", "稳赚", "无脑买", "百分百", "带单", "会员群", "翻百倍", "100x", "必涨")
+HYPE_TERMS = ("暴富", "稳赚", "无脑买", "百分百", "带单", "会员群", "翻百倍", "100x", "必涨",
+              "骗局", "暴涨", "崩盘", "救你的命", "千万别", "必赚", "彻底崩塌")
 
 
 @dataclass
@@ -127,11 +128,92 @@ def merge_videos(items: list[Video], limit: int) -> list[Video]:
                     original.matched_queries.append(query)
     # Dated first within same relevance score; undated videos are never
     # falsely described as timely, and their time status remains explicit.
-    return sorted(seen.values(), key=lambda v: (
+    ranked = sorted(seen.values(), key=lambda v: (
         v.relevance_score,
         v.published_at_utc is not None,
         v.published_at_utc or "",
-    ), reverse=True)[:limit]
+    ), reverse=True)
+    # Many different channels post identical clickbait headlines.
+    unique_titles: set[str] = set()
+    output: list[Video] = []
+    for video in ranked:
+        key = re.sub(r"[^\\w\\u4e00-\\u9fff]+", "", video.title.casefold())
+        if key in unique_titles:
+            continue
+        unique_titles.add(key)
+        output.append(video)
+        if len(output) >= limit:
+            break
+    return output
+
+
+def _within_window(date_value: str, *, now: datetime, hours: int) -> bool:
+    """Validate known dates without making YYYY-MM-DD look like a UTC instant."""
+    cutoff = now - timedelta(hours=hours)
+    if len(date_value) == 10:
+        dt_date = datetime.fromisoformat(date_value).date()
+        return cutoff.date() <= dt_date <= (now + timedelta(hours=24)).date()
+    dt = datetime.fromisoformat(date_value)
+    return cutoff <= dt <= now + timedelta(hours=24)
+
+
+def fetch_video_metadata(video: Video, *, cookies: str = "none") -> dict:
+    """Query complete YouTube metadata; does NOT download or analyze media."""
+    executable = find_ytdlp()
+    if not executable:
+        raise PipelineError("yt-dlp missing")
+    if cookies not in ("none", "chrome", "firefox", "chromium", "brave"):
+        raise PipelineError("Unsupported cookie browser")
+    command = [
+        executable, "--no-playlist", "--skip-download",
+        "--dump-single-json", "--no-warnings",
+        "--js-runtimes", "node", video.url,
+    ]
+    if cookies != "none":
+        command[1:1] = ["--cookies-from-browser", cookies]
+    result = checked_run(command, timeout=80)
+    try:
+        data = json.loads(result.stdout)
+        if not isinstance(data, dict) or data.get("id") != video.id:
+            raise ValueError("Invalid video metadata or mismatched video ID")
+        return data
+    except json.JSONDecodeError as exc:
+        raise PipelineError("YouTube metadata is not valid JSON") from exc
+
+
+def verify_video_dates(videos: list[Video], *, count: int, cookies: str,
+                       hours: int, now: datetime, errors: list[str]) -> list[Video]:
+    """Verify the highest-ranked candidates, remove confirmed-old videos.
+
+    Unverified candidates remain explicitly undated but are never selected
+    automatically for paid analysis unless the user opts in.
+    """
+    kept: list[Video] = []
+    for index, video in enumerate(videos):
+        if index >= count or video.published_at_utc is not None:
+            kept.append(video)
+            continue
+        try:
+            data = fetch_video_metadata(video, cookies=cookies)
+            published = _date(data)
+            if published is not None:
+                if not _within_window(published, now=now, hours=hours):
+                    print(f"[SKIP] {video.id}: verified outside {hours}h window")
+                    continue
+                video.published_at_utc = published
+                video.time_status = "date-only" if len(published) == 10 else "timestamp"
+            if not video.channel or video.channel == "未知频道":
+                video.channel = str(data.get("channel") or data.get("uploader") or "未知频道")
+            if video.duration_seconds is None and isinstance(data.get("duration"), (int, float)):
+                video.duration_seconds = int(data["duration"])
+        except (PipelineError, OSError, ValueError, TypeError) as exc:
+            errors.append(f"Metadata {video.id}: {str(exc)[:160]}")
+        kept.append(video)
+    # Verified freshness ranks above merely relevant undated titles.
+    return sorted(kept, key=lambda v: (
+        v.published_at_utc is not None, v.relevance_score,
+        v.published_at_utc or "",
+    ), reverse=True)
 
 
 def find_videos(query: str, count: int, *, cookies: str = "none") -> dict:
@@ -260,6 +342,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-results", type=int, default=15)
     parser.add_argument("--hours", type=int, default=168, help="Exclude dated videos older than N hours; undated results are labeled")
     parser.add_argument("--min-seconds", type=int, default=90)
+    parser.add_argument("--verify-top", type=int, default=5, help="Check upload dates of N top videos (extra YouTube requests; 0 disables)")
+    parser.add_argument("--allow-unknown-age", action="store_true", help="Explicitly allow paid analysis of videos without verified dates")
     parser.add_argument("--cookies", choices=("none", "chrome", "firefox", "chromium", "brave"), default="none")
     parser.add_argument("--analyze-top", type=int, default=0, help="Explicitly call Summarize + DeepSeek for top N results; costs API credits")
     parser.add_argument("--model", help="Model used only if --analyze-top is nonzero")
@@ -267,7 +351,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if not (1 <= args.per_query <= 30 and 1 <= args.max_results <= 100
             and 1 <= args.hours <= 8760 and 0 <= args.min_seconds <= 3600
-            and 0 <= args.analyze_top <= 10):
+            and 0 <= args.analyze_top <= 10 and 0 <= args.verify_top <= 30):
         parser.error("Invalid query/results/hours/min-seconds/analyze-top setting")
     try:
         if args.fixture:
@@ -303,11 +387,24 @@ def main(argv: list[str] | None = None) -> int:
     if not succeeded:
         print("[FAIL] All YouTube searches failed; old report preserved.", file=sys.stderr)
         return 1
-    videos = merge_videos(found, args.max_results)
+    # Retain some replacements in case high-ranked search results turn out old.
+    videos = merge_videos(found, min(100, args.max_results + args.verify_top))
+    if not args.fixture and args.verify_top:
+        videos = verify_video_dates(videos, count=args.verify_top,
+                                   cookies=args.cookies, hours=args.hours,
+                                   now=now, errors=errors)
+    videos = videos[:args.max_results]
     output = Path(args.output).expanduser().resolve()
     new_count = remember(output / "seen.db", videos)
-    analyzed = analyze_selected(videos, output, args.analyze_top, args.cookies, args.refresh,
-                                args.model or "", errors) if args.analyze_top else []
+    candidates_for_analysis = (
+        videos if args.allow_unknown_age else
+        [v for v in videos if v.published_at_utc is not None]
+    )
+    if args.analyze_top and not args.allow_unknown_age and not candidates_for_analysis:
+        errors.append("No confirmed recent videos for paid analysis; use --allow-unknown-age to override.")
+    analyzed = analyze_selected(candidates_for_analysis, output, args.analyze_top,
+                                args.cookies, args.refresh, args.model or "",
+                                errors) if args.analyze_top and candidates_for_analysis else []
     render(output, videos, new_count=new_count, errors=errors,
            requested=len(sources), analyzed=analyzed)
     print(f"[PASS] videos={len(videos)} new={new_count} analyzed={sum(a['status'] == 'analyzed' for a in analyzed)}")
