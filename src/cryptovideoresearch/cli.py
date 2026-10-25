@@ -154,7 +154,19 @@ def cmd_youtube_news(args: argparse.Namespace) -> int:
 
     root = Path(__file__).resolve().parents[2]
     config = Path(args.config).expanduser() if args.config else root / "youtube_news_queries.json"
-    output = Path(args.output).expanduser() if args.output else root / "outputs/youtube-news"
+    if args.channel:
+        from .channels import normalize_channel, channel_slug
+        url = normalize_channel(args.channel)
+        output = Path(args.output).expanduser() if args.output else root / "outputs" / "youtubers" / channel_slug(url)
+    else:
+        url = None
+        if args.channel:
+        from .channels import normalize_channel, channel_slug
+        url = normalize_channel(args.channel)
+        output = Path(args.output).expanduser() if args.output else root / "outputs" / "youtubers" / channel_slug(url)
+    else:
+        url = None
+        output = Path(args.output).expanduser() if args.output else root / "outputs/youtube-news"
     argv = [
         "--config", str(config), "--output", str(output),
         "--hours", str(args.hours), "--per-query", str(args.per_query),
@@ -162,6 +174,8 @@ def cmd_youtube_news(args: argparse.Namespace) -> int:
         "--analyze-top", str(args.analyze_top), "--cookies", args.cookies,
         "--verify-top", str(args.verify_top),
     ]
+    if url:
+        argv.extend(["--channel", url])
     if args.fixture:
         argv.extend(["--fixture", args.fixture])
     if args.refresh:
@@ -193,6 +207,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         "--analyze-top", str(args.count),
         "--cookies", args.cookies,
     ]
+    if url:
+        argv.extend(["--channel", url])
     if args.count and not args.strict_dates:
         # First ask YouTube for actual upload dates; when the platform omits
         # them, the report still labels such videos "unknown".
@@ -234,6 +250,10 @@ def build_parser() -> argparse.ArgumentParser:
         description="Research-only YouTube caption extraction and DeepSeek summaries",
     )
     sub = parser.add_subparsers(dest="action", required=True)
+    menu = sub.add_parser("menu", help="Interactive B menu: arrows, digits or Enter for news")
+    menu.set_defaults(handler=lambda args: __import__(
+        "cryptovideoresearch.interactive", fromlist=["main"]
+    ).main())
     setup = sub.add_parser("setup", help="Securely configure a DeepSeek API key")
     setup.add_argument("--replace-key", action="store_true", help="Replace local key")
     setup.add_argument("--skip-key", action="store_true", help="Skip key input")
@@ -251,6 +271,7 @@ def build_parser() -> argparse.ArgumentParser:
     news.set_defaults(handler=cmd_news)
     ytnews = sub.add_parser("youtube-news", help="Search YouTube for market-news videos (no paid APIs by default)")
     ytnews.add_argument("--config", help="Override youtube_news_queries.json")
+    ytnews.add_argument("--channel", help="Only collect videos from this @handle or official YouTube channel URL")
     ytnews.add_argument("--output", help="Output directory for video candidates and optional analyses")
     ytnews.add_argument("--hours", type=int, default=168, help="Exclude known-old uploads; unknown times remain labeled")
     ytnews.add_argument("--per-query", type=int, default=8, help="YouTube search result count per query")
@@ -277,6 +298,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--refresh", action="store_true", help="Re-run DeepSeek for existing reports")
     run.add_argument("--model", help="Override model used for video analysis")
     run.add_argument("--config", help="Custom YouTube search configuration")
+    run.add_argument("--channel", help="YouTuber @handle or official channel URL; report separately")
     run.add_argument("--output", help="Custom report directory")
     run.add_argument("--fixture", help="Offline search fixture (for developer testing)")
     run.set_defaults(handler=cmd_run)
@@ -299,6 +321,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
+    if argv is None:
+        argv = sys.argv[1:]
+    if not argv:
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            from .interactive import main as interactive_main
+            return interactive_main()
+        parser.print_help(sys.stderr)
+        return 2
     args = parser.parse_args(argv)
     try:
         return args.handler(args)
