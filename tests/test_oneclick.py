@@ -83,6 +83,44 @@ class RunTests(unittest.TestCase):
             self.assertEqual(len(errs), 1)
             self.assertEqual(len(calls), 3)
 
+    def test_no_caption_metadata_skips_unusable_candidate(self):
+        with tempfile.TemporaryDirectory() as folder:
+            a, b = video("ZWrgUWKOq_0"), video("abc123DEF_0")
+            a.caption_status = "none"
+            transcript = Path(folder) / "valid.vtt"
+            transcript.write_text("WEBVTT\\nplaceholder", encoding="utf-8")
+            with patch("cryptovideoresearch.youtube_news.extract_captions",
+                       return_value=(transcript, "automatic")) as extractor, \
+                 patch("cryptovideoresearch.youtube_news.analyze_transcript",
+                       return_value="mock summary") as model, \
+                 patch("cryptovideoresearch.youtube_news.write_report",
+                       return_value=Path(folder) / "mock-analysis.md"):
+                errors = []
+                result = analyze_selected([a, b], Path(folder), 1, "none", False, "", errors)
+            self.assertEqual(result[0]["status"], "no-captions")
+            self.assertEqual(result[1]["status"], "analyzed")
+            self.assertEqual(extractor.call_count, 1)
+            self.assertEqual(model.call_count, 1)
+
+    def test_scans_past_three_no_subtitle_videos_for_one_report(self):
+        with tempfile.TemporaryDirectory() as folder:
+            videos = [video(s) for s in ("ZWrgUWKOq_0", "abc123DEF_0", "abcdefghijk", "0123456789A")]
+            transcript = Path(folder) / "valid.vtt"
+            transcript.write_text("WEBVTT\\nplaceholder", encoding="utf-8")
+            def extraction(url, *_a, **_kw):
+                if not url.endswith("0123456789A"):
+                    raise PipelineError("Captions not provided")
+                return transcript, "automatic"
+            with patch("cryptovideoresearch.youtube_news.extract_captions", side_effect=extraction) as extractor, \
+                 patch("cryptovideoresearch.youtube_news.analyze_transcript", return_value="mock summary") as model, \
+                 patch("cryptovideoresearch.youtube_news.write_report",
+                       return_value=Path(folder) / "mock-analysis.md"):
+                result = analyze_selected(videos, Path(folder), 1, "none", False, "", [])
+            self.assertEqual([entry["status"] for entry in result],
+                             ["failed", "failed", "failed", "analyzed"])
+            self.assertEqual(extractor.call_count, 4)
+            self.assertEqual(model.call_count, 1)
+
     def test_cached_report_skips_analyzing_again(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
