@@ -419,8 +419,12 @@ def main(argv: list[str] | None = None) -> int:
                                 errors) if args.analyze_top and candidates_for_analysis else []
     render(output, videos, new_count=new_count, errors=errors,
            requested=len(sources), analyzed=analyzed)
-    print(f"[PASS] videos={len(videos)} new={new_count} analyzed={sum(a['status'] == 'analyzed' for a in analyzed)}")
+    successful = sum(a['status'] in ('analyzed', 'cached') for a in analyzed)
+    print(f"[PASS] videos={len(videos)} new={new_count} analyzed={sum(a['status'] == 'analyzed' for a in analyzed)} cached={sum(a['status'] == 'cached' for a in analyzed)}")
     print(f"Report: {output / 'latest.md'}")
+    if args.analyze_top and successful == 0:
+        print("[WARN] No independent video report was generated; see latest.md for reasons.", file=sys.stderr)
+        return 1
     return 0
 
 
