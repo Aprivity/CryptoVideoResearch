@@ -11,6 +11,7 @@ import sys
 import time
 import webbrowser
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from .config import DEFAULT_MODEL, key_path, load_key, save_key
 from .pipeline import (
@@ -77,26 +78,100 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+def asr_pip_environment(source: dict[str, str], *, pip_proxy: str | None = None,
+                        pip_socks_available: bool = False) -> tuple[dict[str, str], str]:
+    """Choose an HTTP proxy just for pip when pip lacks its SOCKS bootstrap.
+
+    Installing PySocks through a SOCKS proxy is a catch-22: pip's own urllib3
+    needs the PySocks package before it can speak SOCKS. The project's runtime
+    uses HTTPX+socksio after installation, which is a separate dependency.
+    """
+    from .asr import PROXY_ENV_KEYS, normalized_proxy_environment
+    env = normalized_proxy_environment(source)
+    label = "existing environment"
+    if pip_proxy:
+        candidate = urlsplit(pip_proxy)
+        if (candidate.scheme not in ("http", "https") or not candidate.hostname
+                or candidate.username or candidate.password or candidate.fragment
+                or candidate.query or candidate.path not in ("", "/")):
+            raise PipelineError(
+                "--pip-proxy must be an HTTP(S) proxy URL without embedded credentials, "
+                "e.g. http://127.0.0.1:7890"
+            )
+        selected = pip_proxy.rstrip("/")
+        label = "explicit HTTP(S) proxy"
+    elif not pip_socks_available:
+        # Check all variables rather than only HTTPS_PROXY; pip may use any
+        # of these, and urllib3 can fail before reaching our project package.
+        socks_urls = [
+            urlsplit(value) for key, value in env.items()
+            if key in PROXY_ENV_KEYS and value.lower().startswith(
+                ("socks5://", "socks5h://", "socks4://", "socks4a://")
+            )
+        ]
+        if socks_urls:
+            hostnames = {item.hostname for item in socks_urls}
+            ports = {item.port for item in socks_urls}
+            if (hostnames.issubset({"localhost", "127.0.0.1", "::1"})
+                    and len(ports) == 1 and None not in ports
+                    and all(item.username is None and item.password is None
+                            for item in socks_urls)):
+                host = next(iter(hostnames))
+                port = next(iter(ports))
+                selected = f"http://[{host}]:{port}" if host == "::1" else f"http://{host}:{port}"
+                label = "temporary local HTTP proxy (same port; must support HTTP CONNECT)"
+            else:
+                raise PipelineError(
+                    "pip lacks PySocks and cannot bootstrap via its configured SOCKS proxy. "
+                    "Run: cryptovideo asr-setup --pip-proxy http://127.0.0.1:<HTTP_PORT> "
+                    "using an HTTP/mixed listener, or install PySocks through a working "
+                    "HTTP proxy first. No system proxy was changed."
+                )
+        else:
+            return env, label
+    else:
+        return env, label
+    # An explicit or loopback HTTP proxy overrides ALL pip proxy environment
+    # variables for this subprocess only; unrelated NO_PROXY is preserved.
+    for key in PROXY_ENV_KEYS:
+        env.pop(key, None)
+    for key in PROXY_ENV_KEYS:
+        env[key] = selected
+    return env, label
+
+
 def cmd_asr_setup(args: argparse.Namespace) -> int:
-    """Install the opt-in ASR dependency, without downloading model weights."""
+    """Install opt-in ASR dependencies with a pip-compatible proxy bootstrap."""
     from .asr import available
     from importlib.util import find_spec
     if available() and find_spec("socksio") is not None:
-        print("[OK] faster-whisper and HTTPX SOCKS proxy support are already installed.")
+        print("[OK] faster-whisper and HTTPX SOCKS support are already installed.")
         return 0
-    root = Path(__file__).resolve().parents[2]
-    print("[ASR] Installing or upgrading optional faster-whisper and SOCKS proxy support via pip.")
-    print("[ASR] Model weights will only download upon your first ASR transcription.")
-    from .asr import normalized_proxy_environment
+    pip_socks_available = find_spec("socks") is not None
+    env, method = asr_pip_environment(
+        os.environ, pip_proxy=getattr(args, "pip_proxy", None),
+        pip_socks_available=pip_socks_available,
+    )
+    print("[ASR] Installing or upgrading faster-whisper and httpx[socks].")
+    print("[ASR] No Whisper model weights are downloaded by this step.")
+    print(f"[ASR] pip network route: {method}")
+    # Install runtime packages directly: project is already an editable
+    # install, and this avoids creating an unnecessary isolated build env.
     completed = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-e", f"{root}[asr]"],
-        check=False, env=normalized_proxy_environment(os.environ),
+        [sys.executable, "-m", "pip", "install",
+         "faster-whisper>=1.1,<2", "httpx[socks]>=0.27,<1"],
+        check=False, env=env,
     )
     if completed.returncode:
-        print("[FAIL] Optional ASR installation failed; normal caption-only mode is unaffected.",
-              file=sys.stderr)
+        print(
+            "[FAIL] ASR dependencies could not be installed. "
+            "If port 7890 is SOCKS-only, use a local HTTP/mixed proxy port: "
+            "cryptovideo asr-setup --pip-proxy http://127.0.0.1:<HTTP_PORT> . "
+            "Existing caption-only mode remains available.", file=sys.stderr,
+        )
         return completed.returncode
-    print("[OK] Local ASR installed. Select ASR fallback in the interactive settings.")
+    print("[OK] Local ASR dependencies installed. "
+          "The Whisper model downloads on the first transcription.")
     return 0
 
 
@@ -340,6 +415,7 @@ def build_parser() -> argparse.ArgumentParser:
     doctor = sub.add_parser("doctor", help="Check local dependencies (offline)")
     doctor.set_defaults(handler=cmd_doctor)
     setup_asr = sub.add_parser("asr-setup", help="Install optional local ASR runtime (no model download)")
+    setup_asr.add_argument("--pip-proxy", help="Explicit HTTP/mixed proxy for pip bootstrap (not a SOCKS URL)")
     setup_asr.set_defaults(handler=cmd_asr_setup)
     login = sub.add_parser("login", help="Open YouTube for manual sign-in/verification")
     login.set_defaults(handler=cmd_login)
