@@ -93,9 +93,23 @@ def quick_markdown(full: str, ranked_bullets: list[str], *, from_model: bool,
 
 
 def quality_section(review: dict) -> str:
-    """Append warnings to the full report, without corrupting source quotations."""
-    return ("\n## 金融实体与识别质量提示（自动标记，非事实核验）\n\n"
-            + "\n".join(f"- {line}" for line in quality_markdown(review)) + "\n")
+    """Surface detected English corporate names and warnings in full report."""
+    lines = ["", "## 金融实体与识别质量提示（自动标记，非事实核验）", ""]
+    candidates = review.get("recognized_candidates", [])
+    if candidates:
+        names = []
+        for item in candidates:
+            name = item["canonical"]
+            if item.get("ticker"):
+                name += f"（{item['ticker']}）"
+            if name not in names:
+                names.append(name)
+        lines.append("- **金融实体／英文公司名候选：**"
+                     + "、".join(names[:14])
+                     + ("；完整匹配记录见 finance_quality.json" if len(names) > 14 else ""))
+    lines += ["- " + line for line in quality_markdown(review)]
+    lines.append("")
+    return "\n".join(lines)
 
 
 def atomic_write(path: Path, data: str) -> None:
