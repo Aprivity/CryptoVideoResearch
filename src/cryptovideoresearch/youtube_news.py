@@ -339,7 +339,8 @@ def remember(path: Path, videos: list[Video]) -> int:
 
 
 def render(output: Path, videos: list[Video], *, new_count: int,
-           errors: list[str], requested: int, analyzed: list[dict]) -> None:
+           errors: list[str], requested: int, analyzed: list[dict],
+           channel_url: str | None = None) -> None:
     output.mkdir(parents=True, exist_ok=True)
     verified_date_count = sum(video.published_at_utc is not None for video in videos)
     unknown_date_count = len(videos) - verified_date_count
@@ -348,7 +349,8 @@ def render(output: Path, videos: list[Video], *, new_count: int,
         "verified_date_count": verified_date_count,
         "unknown_date_count": unknown_date_count,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "source": "youtube-search",
+        "source": "youtube-channel" if channel_url else "youtube-search",
+        "channel_url": channel_url,
         "requested_queries": requested,
         "discovery_new": new_count,
         "verification_status": "unverified-video-metadata-and-commentary",
@@ -360,8 +362,10 @@ def render(output: Path, videos: list[Video], *, new_count: int,
     tmp = output / "latest.json.tmp"
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     tmp.replace(output / "latest.json")
+    title = "# YouTuber 频道视频与观点候选（未核实）" if channel_url else "# YouTube 市场新闻视频候选（未核实）"
     lines = [
-        "# YouTube 市场新闻视频候选（未核实）", "",
+        title, "",
+        *(["指定频道：" + channel_url, ""] if channel_url else []),
         f"生成（UTC）：{payload['generated_at_utc']}｜视频：{len(videos)} 条｜本轮首次发现：{new_count} 条",
         f"日期已确认：{verified_date_count} 条｜发布日期未知：{unknown_date_count} 条",
         "",
@@ -565,7 +569,8 @@ def main(argv: list[str] | None = None) -> int:
                                 args.cookies, args.refresh, args.model or "",
                                 errors, accept_no_news=bool(args.channel)) if args.analyze_top and candidates_for_analysis else []
     render(output, videos, new_count=new_count, errors=errors,
-           requested=len(sources), analyzed=analyzed)
+           requested=len(sources), analyzed=analyzed,
+           channel_url=channel_url if args.channel else None)
     successful = ('analyzed', 'cached', 'analyzed-no-news', 'cached-no-news') if args.channel else ('analyzed', 'cached')
     useful = sum(a['status'] in successful for a in analyzed)
     no_news = sum(a['status'] in ('analyzed-no-news', 'cached-no-news') for a in analyzed)
