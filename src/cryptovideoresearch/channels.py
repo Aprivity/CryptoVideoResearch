@@ -120,4 +120,4 @@ def find_channels_by_name(name: str, *, count: int = 18,
     return sorted(options, key=lambda x: (
         name_lower == x.name.casefold(),
         name_lower in x.name.casefold(),
-    ), reverse=True)[:15]
+    ), reverse=True)[:8]
