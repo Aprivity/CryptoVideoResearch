@@ -23,7 +23,7 @@ sudo apt-get update && sudo apt-get install -y curl
 3. 安装用户级 npm 包 @steipete/summarize@0.25.3，避免覆盖系统 npm 包。
 4. 安装 yt-dlp[default] + EJS，以及可选的 secretstorage，**不安装 PyTorch / CUDA**。
 5. 克隆指定功能分支到 ~/CryptoVideoResearch，创建 Python 虚拟环境，安装命令行程序。
-6. 在终端隐藏输入 DeepSeek API Key（已有密钥不覆盖），运行 doctor 自检，再尝试采集最近 72 小时 RSS 新闻。
+6. 在终端隐藏输入 DeepSeek API Key（已有密钥不覆盖），运行 doctor 自检，再执行一次 YouTube 市场新闻解读视频检索（默认不调用模型）。
 
 密钥保存到 ~/.config/cryptovideoresearch/deepseek.key（0600 权限），绝不作为命令行参数。已存在的工作目录只在相同分支、没有未提交跟踪文件修改的情况下执行快进更新。
 
@@ -32,15 +32,15 @@ sudo apt-get update && sudo apt-get install -y curl
 在新终端执行，或者先 source ~/.profile：
 
 ~~~bash
-cryptovideo news --hours 72
-cat ~/CryptoVideoResearch/outputs/news/latest.md
+cryptovideo youtube-news --hours 168
+cat ~/CryptoVideoResearch/outputs/youtube-news/latest.md
 cryptovideo doctor
 
 # 可选视频分析：桌面 Chrome 已登录时才使用 cookies。
 cryptovideo analyze 'https://www.youtube.com/watch?v=ZWrgUWKOq_0' --cookies chrome
 ~~~
 
-新闻模块目前只生成 RSS 标题、时间、来源链接的研究线索，**不会调用 DeepSeek 分析新闻正文**。视频分析才会产生 DeepSeek API 费用。
+B 模块默认使用 YouTube 搜索，仅输出视频候选与时间可靠性标记；不会自动调用 DeepSeek。使用 cryptovideo youtube-news --analyze-top 1 才会对视频字幕进行 Summarize + DeepSeek 分析，可能产生 API 费用。
 
 ## Ubuntu 代理（可选）
 
@@ -63,4 +63,4 @@ python -m unittest discover -s tests -v
 python -m cryptovideoresearch.news_monitor --fixture tests/fixtures/news_sample.xml --hours 100000
 ~~~
 
-如果新闻源全部失败，会保留旧报告，不代表安装整体失败。当前仅执行一次采集，不会自动启动周期任务或浏览器，无交易或投资建议功能。
+如果 YouTube 搜索全部失败，会保留旧报告，不代表安装整体失败。当前仅执行一次采集，不会自动启动周期任务或浏览器，无交易或投资建议功能。
