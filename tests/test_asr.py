@@ -11,8 +11,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from cryptovideoresearch.asr import (
-    cached_asr, download_audio, format_timestamp, transcribe_audio,
-    transcribe_video,
+    cached_asr, download_audio, format_timestamp, normalized_proxy_environment,
+    transcribe_audio, transcribe_video,
 )
 from cryptovideoresearch.cli import build_parser
 from cryptovideoresearch.pipeline import (
@@ -68,6 +68,15 @@ class ASRTests(unittest.TestCase):
             self.assertIn("00:00:08.500", dest.read_text(encoding="utf-8"))
             self.assertFalse((root / "local-asr-small.vtt.tmp").exists())
             self.assertIsNone(prefer_caption(root))  # ASR must not masquerade as native subtitle
+
+    def test_proxy_normalization_does_not_mutate_source(self):
+        source = {"ALL_PROXY": "socks://127.0.0.1:7890",
+                  "https_proxy": "https://example.test:443", "NO_PROXY": "localhost"}
+        fixed = normalized_proxy_environment(source)
+        self.assertEqual(source["ALL_PROXY"], "socks://127.0.0.1:7890")
+        self.assertEqual(fixed["ALL_PROXY"], "socks5://127.0.0.1:7890")
+        self.assertEqual(fixed["https_proxy"], source["https_proxy"])
+        self.assertEqual(fixed["NO_PROXY"], "localhost")
 
     def test_legacy_socks_proxy_normalized_only_during_whisper_model_load(self):
         from cryptovideoresearch.asr import PROXY_ENV_KEYS
