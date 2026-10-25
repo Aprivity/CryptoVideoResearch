@@ -49,6 +49,16 @@ def normalize_channel(value: str) -> str:
     raise ValueError("仅支持 YouTube 频道主页或频道 ID，不能输入单个视频链接")
 
 
+
+def channel_slug(url: str) -> str:
+    """Safe predictable directory name for isolated creator reports."""
+    path = urlsplit(normalize_channel(url)).path.removesuffix("/videos").strip("/")
+    name = path.split("/")[-1].lstrip("@")
+    # User handles may contain Unicode; percent encoding is stable, but
+    # directories use ASCII-only identifiers to avoid path traversal.
+    return re.sub(r"[^A-Za-z0-9_-]", "_", name)[:60] or "channel"
+
+
 def list_channel_uploads(url: str, *, count: int = 30, cookies: str = "none") -> dict:
     """Flat playlist of a single channel's video uploads, newest first."""
     url = normalize_channel(url)
