@@ -11,7 +11,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from cryptovideoresearch.asr import (
-    cached_asr, download_audio, format_timestamp, normalized_proxy_environment,
+    cached_asr, compatible_pyav_audio_decoder, download_audio,
+    format_timestamp, normalized_proxy_environment,
     transcribe_audio, transcribe_video,
 )
 from cryptovideoresearch.cli import asr_pip_environment, build_parser
@@ -112,26 +113,21 @@ class ASRTests(unittest.TestCase):
             asr_pip_environment({"HTTPS_PROXY": "socks5://proxy.example.test:1080"},
                                 pip_socks_available=False)
 
-    def test_asr_setup_repairs_existing_pyav_19_instead_of_returning_early(self):
+    def test_asr_setup_accepts_installed_pyav19_without_pip_network(self):
         from cryptovideoresearch.cli import cmd_asr_setup
         from argparse import Namespace
         with patch("cryptovideoresearch.asr.available", return_value=True), \
              patch("cryptovideoresearch.asr.installed_pyav_major", return_value=19), \
-             patch("cryptovideoresearch.cli.subprocess.run",
-                   return_value=subprocess.CompletedProcess([], 0, "", "")) as runner:
-            self.assertEqual(
-                cmd_asr_setup(Namespace(pip_proxy="http://127.0.0.1:7890")), 0,
-            )
-        packages = runner.call_args.args[0]
-        self.assertIn("av>=11,<19", packages)
-        self.assertIn("faster-whisper>=1.1,<2", packages)
+             patch("importlib.util.find_spec", return_value=object()), \
+             patch("cryptovideoresearch.cli.subprocess.run") as pip:
+            self.assertEqual(cmd_asr_setup(Namespace(pip_proxy=None)), 0)
+        pip.assert_not_called()
 
-    def test_incompatible_pyav_is_detected_before_video_download(self):
+    def test_existing_pyav19_accepted_for_local_decoder_adapter(self):
         from cryptovideoresearch.cli import require_asr_runtime
         with patch("cryptovideoresearch.asr.available", return_value=True), \
              patch("cryptovideoresearch.asr.installed_pyav_major", return_value=19):
-            with self.assertRaisesRegex(PipelineError, "asr-setup"):
-                require_asr_runtime()
+            self.assertIsNone(require_asr_runtime())
 
     def test_legacy_decoder_kwarg_error_is_actionable(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -146,9 +142,56 @@ class ASRTests(unittest.TestCase):
             with patch.dict(sys.modules, {
                 "faster_whisper": types.SimpleNamespace(WhisperModel=OldDecoderWhisper)
             }):
-                with self.assertRaisesRegex(PipelineError, "av>=11,<19"):
+                with self.assertRaisesRegex(PipelineError, "compatibility adapter"):
                     transcribe_audio(audio, root / "local-asr-base.vtt", model="base")
             self.assertTrue(audio.exists())
+
+    def test_pyav19_adapter_removes_only_removed_kwarg_and_restores_pyav_open(self):
+        captured = []
+        def fake_open(*args, **kwargs):
+            captured.append((args, kwargs))
+            return "dummy container"
+        fake_av = types.SimpleNamespace(open=fake_open)
+        audio_module = types.SimpleNamespace(av=fake_av)
+        with patch.dict(sys.modules, {"faster_whisper.audio": audio_module}), \
+             patch("cryptovideoresearch.asr.installed_pyav_major", return_value=19):
+            with compatible_pyav_audio_decoder():
+                output = audio_module.av.open(
+                    "input.m4a", mode="r", metadata_errors="ignore"
+                )
+                self.assertEqual(output, "dummy container")
+            self.assertIs(fake_av.open, fake_open)
+        self.assertEqual(captured, [(("input.m4a",), {"mode": "r"})])
+
+    def test_pyav19_adapter_remains_active_through_lazy_transcribe_generator(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            audio = root / "cached.m4a"
+            audio.write_bytes(b"A" * 2048)
+            captured = []
+            def native_open(*args, **kwargs):
+                self.assertNotIn("metadata_errors", kwargs)
+                captured.append("decoded")
+                return object()
+            fake_av = types.SimpleNamespace(open=native_open)
+            audio_module = types.SimpleNamespace(av=fake_av)
+            class Whisper:
+                def __init__(self, *args, **kwargs):
+                    pass
+                def transcribe(self, *args, **kwargs):
+                    def lazy():
+                        audio_module.av.open(audio, metadata_errors="ignore")
+                        yield types.SimpleNamespace(start=0, end=4, text=GOOD_TEXT)
+                    return lazy(), types.SimpleNamespace(language="zh")
+            with patch.dict(sys.modules, {
+                "faster_whisper": types.SimpleNamespace(WhisperModel=Whisper),
+                "faster_whisper.audio": audio_module,
+            }), patch("cryptovideoresearch.asr.installed_pyav_major", return_value=19), \
+                 patch("cryptovideoresearch.asr.model_cache_dir", return_value=root / "cache"):
+                result = transcribe_audio(audio, root / "local-asr-base.vtt", model="base")
+            self.assertTrue(valid_vtt(result))
+            self.assertEqual(captured, ["decoded"])
+            self.assertIs(fake_av.open, native_open)
 
     def test_asr_setup_direct_install_avoids_isolated_project_build(self):
         from cryptovideoresearch.cli import cmd_asr_setup
@@ -162,7 +205,7 @@ class ASRTests(unittest.TestCase):
         args, kwargs = pip.call_args
         self.assertIn("faster-whisper>=1.1,<2", args[0])
         self.assertIn("httpx[socks]>=0.27,<1", args[0])
-        self.assertIn("av>=11,<19", args[0])
+        self.assertNotIn("av>=11,<19", args[0])
         self.assertNotIn("-e", args[0])
         self.assertEqual(kwargs["env"]["HTTPS_PROXY"], "http://127.0.0.1:7890")
 
