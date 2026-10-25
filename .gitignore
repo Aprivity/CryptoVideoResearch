@@ -1,0 +1,28 @@
+# Credentials and user configuration
+.env
+.env.*
+!.env.example
+*.key
+*.cookies
+cookies.txt
+config.local.*
+secrets.*
+# Generated research content
+outputs/
+results/
+downloads/
+*.vtt
+*.srt
+*.json3
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+# Editors and operating system
+.idea/
+.vscode/
+.DS_Store

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cryptovideoresearch"
+version = "0.1.0"
+description = "Research-only YouTube transcript extraction and opinion summarization"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Aprivity" }]
+dependencies = []
+
+[project.scripts]
+cryptovideo = "cryptovideoresearch.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+cryptovideoresearch = ["py.typed"]
