@@ -1,0 +1,9 @@
+{
+  "sources": [
+    {"name": "Google News / Bitcoin", "type": "google_news", "topic": "BTC 与加密市场", "query": "Bitcoin OR BTC when:7d", "limit": 30},
+    {"name": "Google News / US macro", "type": "google_news", "topic": "美联储与宏观", "query": "(Federal Reserve OR CPI OR PPI OR inflation OR jobs report) when:7d", "limit": 30},
+    {"name": "Federal Reserve monetary policy", "type": "rss", "topic": "美联储与宏观", "url": "https://www.federalreserve.gov/feeds/press_monetary.xml", "limit": 20},
+    {"name": "Google News / AI & semiconductors", "type": "google_news", "topic": "AI 与半导体", "query": "(NVIDIA OR Micron OR semiconductors OR DRAM OR AI chips) when:7d", "limit": 30},
+    {"name": "CoinDesk", "type": "rss", "topic": "BTC 与加密市场", "url": "https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml", "limit": 25}
+  ]
+}
