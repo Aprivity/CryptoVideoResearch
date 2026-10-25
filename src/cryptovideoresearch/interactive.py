@@ -22,6 +22,8 @@ CHOICES_COOKIES = ("none", "chrome", "firefox", "chromium", "brave")
 DEFAULTS = {
     "count": 2, "hours": 168, "cookies": "none", "strict_dates": False,
     "verify_top": 10, "channels": [], "last_channel": "",
+    "asr_fallback": False, "asr_model": "small", "asr_device": "cpu",
+    "keep_audio": False,
 }
 
 
@@ -47,6 +49,13 @@ def load_settings(path: Path | None = None) -> dict:
             config["cookies"] = stored["cookies"]
         if type(stored.get("strict_dates")) is bool:
             config["strict_dates"] = stored["strict_dates"]
+        for key in ("asr_fallback", "keep_audio"):
+            if type(stored.get(key)) is bool:
+                config[key] = stored[key]
+        if stored.get("asr_model") in ("tiny", "base", "small", "medium"):
+            config["asr_model"] = stored["asr_model"]
+        if stored.get("asr_device") in ("cpu", "cuda"):
+            config["asr_device"] = stored["asr_device"]
         valid = []
         for entry in stored.get("channels", [])[:50]:
             if not isinstance(entry, dict):
@@ -193,6 +202,8 @@ def launch(channel: Channel | None, config: dict) -> None:
     print(f"\n运行 B · {mode}")
     print(f"视频范围：{config['hours']} 小时，DeepSeek 最多 {config['count']} 次模型调用")
     print(f"浏览器 Cookies：{config['cookies']}｜严格日期：{'开启' if config['strict_dates'] else '关闭'}")
+    print(f"本地 ASR：{'开启' if config['asr_fallback'] else '关闭'}"
+          + (f"（{config['asr_model']} / {config['asr_device']}）" if config['asr_fallback'] else ""))
     if config["cookies"] == "none":
         print("[INFO] 当前匿名访问 YouTube。如果字幕不可用，可在主菜单的「运行设置」中改为 chrome。")
     print("报告按视频独立保存；旧报告保留并复用缓存。")
@@ -204,6 +215,29 @@ def launch(channel: Channel | None, config: dict) -> None:
     ]
     if config["strict_dates"]:
         args.append("--strict-dates")
+    if config["asr_fallback"]:
+        from .asr import available as asr_available
+        if not asr_available():
+            choice = choose(
+                "首次使用本地 ASR：先安装 faster-whisper 运行依赖（会联网下载安装包，"
+                "但模型权重在实际转写时才下载）",
+                ["安装可选依赖并继续", "取消本次运行"],
+            )
+            if choice != 0:
+                return
+            setup = build_parser().parse_args(["asr-setup"])
+            try:
+                if setup.handler(setup) != 0:
+                    pause()
+                    return
+            except (OSError, RuntimeError, ValueError) as exc:
+                print(f"ASR 安装失败：{exc}")
+                pause()
+                return
+        args.extend(["--asr-fallback", "--asr-model", config["asr_model"],
+                     "--asr-device", config["asr_device"]])
+        if config["keep_audio"]:
+            args.append("--keep-audio")
     if channel:
         args.extend(["--channel", channel.url])
     command = build_parser().parse_args(args)
@@ -225,10 +259,14 @@ def settings_menu(config: dict) -> None:
             f"时间窗口：{config['hours']} 小时",
             f"浏览器 Cookies：{config['cookies']}",
             f"只要发布时间已确认：{'是' if config['strict_dates'] else '否'}",
+            f"无字幕时启用本地 ASR：{'开启' if config['asr_fallback'] else '关闭（默认）'}",
+            f"ASR 模型大小：{config['asr_model']}",
+            f"ASR 运行设备：{config['asr_device']}",
+            f"转写完成后保留音频：{'是' if config['keep_audio'] else '否'}",
             "返回主菜单",
         ]
         index = choose("B 工作流设置（更改后自动保存在本机）", labels)
-        if index == 4:
+        if index == 8:
             return
         if index == 0:
             selected = choose("选择每轮最多调用 DeepSeek 的次数",
@@ -236,20 +274,41 @@ def settings_menu(config: dict) -> None:
                               default=config["count"]-1)
             if selected < 5:
                 config["count"] = selected+1
-        if index == 1:
+        elif index == 1:
             selected = choose("选择视频时效窗口", [
                 "24 小时", "72 小时", "168 小时（7 天）", "336 小时（14 天）", "返回"
             ], default={24:0,72:1,168:2,336:3}.get(config["hours"],2))
             if selected < 4:
                 config["hours"] = (24,72,168,336)[selected]
-        if index == 2:
+        elif index == 2:
             selected = choose("Cookies 来源", [*CHOICES_COOKIES, "返回"],
                               default=CHOICES_COOKIES.index(config["cookies"]))
             if selected < len(CHOICES_COOKIES):
                 config["cookies"] = CHOICES_COOKIES[selected]
-        if index == 3:
+        elif index == 3:
             config["strict_dates"] = not config["strict_dates"]
+        elif index == 4:
+            config["asr_fallback"] = not config["asr_fallback"]
+            if config["asr_fallback"]:
+                print("ASR 已启用。首次实际转写可能下载模型到本地缓存，且会消耗 CPU/GPU。")
+                print("如果运行依赖未安装，下次分析前会征求确认。")
+        elif index == 5:
+            models = ("tiny", "base", "small", "medium")
+            selected = choose("ASR 模型：越大通常越准确，但越耗内存与算力",
+                              [*models, "返回"], default=models.index(config["asr_model"]))
+            if selected < len(models):
+                config["asr_model"] = models[selected]
+        elif index == 6:
+            devices = ("cpu", "cuda")
+            selected = choose("ASR 推理设备（CUDA 需要额外兼容的驱动及 CUDA 库）",
+                              ["CPU（默认/最兼容）", "NVIDIA CUDA（需自己配置）", "返回"],
+                              default=devices.index(config["asr_device"]))
+            if selected < len(devices):
+                config["asr_device"] = devices[selected]
+        elif index == 7:
+            config["keep_audio"] = not config["keep_audio"]
         save_settings(config)
+
 
 
 def saved_channels_menu(config: dict) -> None:
