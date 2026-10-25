@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import os
 import re
+import importlib
+from unittest.mock import patch
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -122,6 +124,40 @@ def compatible_model_download_proxies():
             os.environ[key] = value
 
 
+@contextmanager
+def compatible_pyav_audio_decoder():
+    """Temporarily adapt older faster-whisper's av.open call for PyAV >=19.
+
+    Released faster-whisper 1.2.1 passes metadata_errors='ignore', removed
+    by PyAV 19. Upstream faster-whisper already fixes this by omitting that
+    kwarg with new versions of PyAV. Apply the same compatibility behavior
+    only while transcribing, then restore the original function.
+    This is process-scoped and does not alter installed site-packages.
+    """
+    if (installed_pyav_major() or 0) < 19:
+        yield
+        return
+    try:
+        fw_audio = importlib.import_module("faster_whisper.audio")
+    except ImportError:
+        # Older tests stub WhisperModel without the full optional library.
+        yield
+        return
+    pyav = fw_audio.av
+    original_open = pyav.open
+
+    def compatible_open(*args, **kwargs):
+        if "metadata_errors" in kwargs:
+            kwargs = dict(kwargs)
+            kwargs.pop("metadata_errors")
+        return original_open(*args, **kwargs)
+
+    with patch.object(pyav, "open", compatible_open):
+        print("[ASR] PyAV 19+ compatibility for faster-whisper audio decoding enabled",
+              flush=True)
+        yield
+
+
 def transcribe_audio(audio: Path, target: Path, *, model: str = "small",
                      device: str = "cpu") -> Path:
     """Decode using PyAV, transcribe locally with faster-whisper, save VTT atomically."""
@@ -144,21 +180,23 @@ def transcribe_audio(audio: Path, target: Path, *, model: str = "small",
                 compute_type="int8" if device == "cpu" else "float16",
                 download_root=str(root),
             )
-        segments, _ = whisper.transcribe(
-            str(audio), beam_size=5, vad_filter=True,
-            condition_on_previous_text=False,
-        )
         lines = ["WEBVTT", ""]
-        # Inference is lazy: consume all segments before writing the VTT.
-        for segment in segments:
-            start, end = float(segment.start), float(segment.end)
-            text = re.sub(r"\s+", " ", str(segment.text)).strip()
-            if not text or end <= start or start < 0:
-                continue
-            lines.extend([
-                f"{format_timestamp(start)} --> {format_timestamp(end)}",
-                text, "",
-            ])
+        # Whisper inference is lazy: the compatibility patch must stay active
+        # until every generator segment has been decoded and consumed.
+        with compatible_pyav_audio_decoder():
+            segments, _ = whisper.transcribe(
+                str(audio), beam_size=5, vad_filter=True,
+                condition_on_previous_text=False,
+            )
+            for segment in segments:
+                start, end = float(segment.start), float(segment.end)
+                text = re.sub(r"\s+", " ", str(segment.text)).strip()
+                if not text or end <= start or start < 0:
+                    continue
+                lines.extend([
+                    f"{format_timestamp(start)} --> {format_timestamp(end)}",
+                    text, "",
+                ])
     except (OSError, RuntimeError, ValueError, TypeError) as exc:
         message = str(exc)
         if ("Using SOCKS proxy" in message and "socksio" in message) or (
@@ -171,10 +209,9 @@ def transcribe_audio(audio: Path, target: Path, *, model: str = "small",
             ) from exc
         if isinstance(exc, TypeError) and "metadata_errors" in message and "open()" in message:
             raise PipelineError(
-                "Incompatible faster-whisper / PyAV audio decoder: "
-                "installed PyAV 19+ removed av.open(metadata_errors=...). "
-                "Run: cryptovideo asr-setup (installs compatible av>=11,<19). "
-                "The downloaded audio is preserved for retry."
+                "faster-whisper/PyAV audio decoder unexpectedly rejected metadata_errors. "
+                "Update CryptoVideoResearch to use the PyAV 19+ compatibility adapter; "
+                "audio is preserved for retry."
             ) from exc
         raise PipelineError(f"Local ASR failed: {exc}") from exc
 
