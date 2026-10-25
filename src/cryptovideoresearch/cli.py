@@ -87,9 +87,10 @@ def cmd_asr_setup(args: argparse.Namespace) -> int:
     root = Path(__file__).resolve().parents[2]
     print("[ASR] Installing or upgrading optional faster-whisper and SOCKS proxy support via pip.")
     print("[ASR] Model weights will only download upon your first ASR transcription.")
+    from .asr import normalized_proxy_environment
     completed = subprocess.run(
         [sys.executable, "-m", "pip", "install", "-e", f"{root}[asr]"],
-        check=False,
+        check=False, env=normalized_proxy_environment(os.environ),
     )
     if completed.returncode:
         print("[FAIL] Optional ASR installation failed; normal caption-only mode is unaffected.",
