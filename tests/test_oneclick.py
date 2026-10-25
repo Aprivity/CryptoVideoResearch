@@ -121,6 +121,57 @@ class RunTests(unittest.TestCase):
             self.assertEqual(extractor.call_count, 4)
             self.assertEqual(model.call_count, 1)
 
+    def test_existing_no_news_report_is_not_counted_as_news(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            old = root / "videos" / "ZWrgUWKOq_0" / "analysis.md"
+            old.parent.mkdir(parents=True)
+            old.write_text(
+                "## 视频主题与核心信息\\n没有可靠的新闻事件内容。\\n",
+                encoding="utf-8",
+            )
+            transcript = root / "sample.vtt"
+            transcript.write_text("WEBVTT\\nplaceholder", encoding="utf-8")
+            with patch("cryptovideoresearch.youtube_news.extract_captions",
+                       return_value=(transcript, "uploaded")) as extractor, \
+                 patch("cryptovideoresearch.youtube_news.analyze_transcript",
+                       return_value="新闻相关性：有具体事件\\n## 事件\\nCPI") as model, \
+                 patch("cryptovideoresearch.youtube_news.write_report",
+                       return_value=root / "fake.md"):
+                out = analyze_selected(
+                    [video("ZWrgUWKOq_0"), video("abc123DEF_0")],
+                    root, 1, "none", False, "", [],
+                )
+            self.assertEqual([item["status"] for item in out],
+                             ["cached-no-news", "analyzed"])
+            self.assertEqual(model.call_count, 1)
+            self.assertEqual(extractor.call_count, 1)
+
+    def test_new_no_news_report_preserved_and_api_budget_still_capped(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            transcript = root / "sample.vtt"
+            transcript.write_text("WEBVTT\\nplaceholder", encoding="utf-8")
+            def write_report(**kwargs):
+                file = root / "videos" / kwargs["video_id"] / "analysis.md"
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text(kwargs["summary"], encoding="utf-8")
+                return file
+            with patch("cryptovideoresearch.youtube_news.extract_captions",
+                       return_value=(transcript, "uploaded")) as extractor, \
+                 patch("cryptovideoresearch.youtube_news.analyze_transcript",
+                       return_value="新闻相关性：无具体事件\\n## 内容\\n只有技术分析") as model, \
+                 patch("cryptovideoresearch.youtube_news.write_report",
+                       side_effect=write_report):
+                out = analyze_selected(
+                    [video("ZWrgUWKOq_0"), video("abc123DEF_0")],
+                    root, 1, "none", False, "", [],
+                )
+            self.assertEqual([item["status"] for item in out], ["analyzed-no-news"])
+            self.assertEqual(model.call_count, 1)
+            self.assertEqual(extractor.call_count, 1)
+            self.assertTrue((root / "videos" / "ZWrgUWKOq_0" / "analysis.md").is_file())
+
     def test_cached_report_skips_analyzing_again(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
