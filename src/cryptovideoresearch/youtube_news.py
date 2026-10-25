@@ -15,8 +15,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .pipeline import (
-    PipelineError, analyze_transcript, checked_run, extract_captions,
-    find_ytdlp, write_report,
+    PipelineError, YouTubeAccessError, analyze_transcript, checked_run,
+    extract_captions, find_ytdlp, write_report,
 )
 
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
@@ -282,6 +282,15 @@ def verify_video_dates(videos: list[Video], *, count: int, cookies: str,
                         for lang, formats in tracks.items() if isinstance(formats, list)
                     ) else "none"
                 )
+        except YouTubeAccessError as exc:
+            # A global access challenge is not a subtitle problem. Stop the
+            # metadata loop rather than triggering dozens of identical requests.
+            errors.append(f"YouTube authentication challenge: {str(exc)[:400]}")
+            print("[FAIL] YouTube requests sign-in/bot verification; "
+                  "stopping metadata checks to avoid repeated blocked requests.",
+                  file=sys.stderr)
+            kept.append(video)
+            break
         except (PipelineError, OSError, ValueError, TypeError) as exc:
             errors.append(f"Metadata {video.id}: {str(exc)[:160]}")
         kept.append(video)
@@ -478,6 +487,14 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
                             "classification": kind, "analysis_file": str(report)})
             if kind != "no-news":
                 completed += 1
+        except YouTubeAccessError as exc:
+            # Stop the entire loop: this is a platform access block and says
+            # nothing about the existence of captions on any candidate.
+            errors.append(f"YouTube authentication challenge: {str(exc)[:400]}")
+            results.append({"video_id": video.id, "status": "access-blocked"})
+            print(f"[FAIL] YouTube verification required at {video.id}; "
+                  "stopping further video requests.", file=sys.stderr)
+            break
         except (PipelineError, OSError, ValueError, RuntimeError) as exc:
             msg = f"{video.id} analysis failed: {exc}"
             errors.append(msg[:500])
@@ -576,6 +593,16 @@ def main(argv: list[str] | None = None) -> int:
     videos = videos[:args.max_results]
     output = Path(args.output).expanduser().resolve()
     new_count = remember(output / "seen.db", videos)
+    if any(err.startswith("YouTube authentication challenge:") for err in errors):
+        render(output, videos, new_count=new_count, errors=errors,
+               requested=len(sources), analyzed=[],
+               channel_url=channel_url if args.channel else None)
+        print(f"[FAIL] YouTube access blocked; 0 DeepSeek calls made. "
+              f"Report: {output / 'latest.md'}", file=sys.stderr)
+        print("[HINT] Configure signed-in browser Cookies in B Settings "
+              "or explicitly pass --cookies chrome and retry once.",
+              file=sys.stderr)
+        return 1
     candidates_for_analysis = (
         videos if args.allow_unknown_age else
         [v for v in videos if v.published_at_utc is not None]
@@ -595,11 +622,18 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Report: {output / 'latest.md'}")
     if args.analyze_top and useful == 0:
         subtitle_failures = sum(a['status'] == 'no-captions' for a in analyzed)
+        blocked = sum(a['status'] == 'access-blocked' for a in analyzed)
         other_failures = sum(a['status'] == 'failed' for a in analyzed)
-        print(f"[FAIL] No report generated: {subtitle_failures} videos without usable captions, "
-              f"{other_failures} other analysis failures, "
+        print(f"[FAIL] No report generated: {blocked} YouTube verification blocks, "
+              f"{subtitle_failures} videos with unavailable captions, "
+              f"{other_failures} other failures, "
               f"{len(candidates_for_analysis)} eligible candidates.", file=sys.stderr)
-        if not candidates_for_analysis:
+        if blocked:
+            print("[HINT] YouTube is requesting sign-in/bot verification. "
+                  "Select a signed-in browser under Cookies settings "
+                  "(e.g. chrome); repeating anonymous requests will not help.",
+                  file=sys.stderr)
+        elif not candidates_for_analysis:
             print("[HINT] Check video publication dates; --strict-dates may exclude every video.",
                   file=sys.stderr)
         elif subtitle_failures and not other_failures:
