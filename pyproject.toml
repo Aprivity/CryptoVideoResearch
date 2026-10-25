@@ -14,7 +14,7 @@ dependencies = []
 
 [project.optional-dependencies]
 # Lazy import: standard news-only installations stay small and offline.
-asr = ["faster-whisper>=1.1,<2"]
+asr = ["faster-whisper>=1.1,<2", "httpx[socks]>=0.27,<1"]
 
 [project.scripts]
 cryptovideo = "cryptovideoresearch.cli:main"
