@@ -79,6 +79,16 @@ PROXY_ENV_KEYS = (
 )
 
 
+def normalized_proxy_environment(source: dict[str, str]) -> dict[str, str]:
+    """Return a copy with legacy SOCKS URLs mapped to explicit SOCKS5 URLs."""
+    output = dict(source)
+    for key in PROXY_ENV_KEYS:
+        value = output.get(key)
+        if value is not None and value.lower().startswith("socks://"):
+            output[key] = "socks5://" + value[len("socks://"):]
+    return output
+
+
 @contextmanager
 def compatible_model_download_proxies():
     """Normalize legacy socks:// to socks5:// only while loading Whisper.
@@ -88,13 +98,10 @@ def compatible_model_download_proxies():
     including ALL_PROXY, and restore it even when the download fails.
     The user controls the proxy; do not change host, port, or credentials.
     """
-    original: dict[str, str] = {}
+    original = {key: os.environ[key] for key in PROXY_ENV_KEYS
+                if key in os.environ and os.environ[key].lower().startswith("socks://")}
     try:
-        for key in PROXY_ENV_KEYS:
-            value = os.environ.get(key)
-            if value is not None and value.lower().startswith("socks://"):
-                original[key] = value
-                os.environ[key] = "socks5://" + value[len("socks://"):]
+        os.environ.update(normalized_proxy_environment({key: original[key] for key in original}))
         if original:
             print("[ASR] Normalized legacy SOCKS proxy scheme for model download "
                   "(temporary; original environment will be restored)", flush=True)
