@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import pty
+import threading
 import tempfile
 import unittest
 from pathlib import Path
@@ -28,6 +31,28 @@ class InteractiveTests(unittest.TestCase):
         with patch("cryptovideoresearch.interactive.sys.stdin", io.StringIO("")), \
              patch("builtins.input", return_value="2"):
             self.assertEqual(choose("B 工作流", ["市场新闻", "YouTuber", "退出"]), 1)
+
+    def test_arrow_down_then_enter_on_linux_pty(self):
+        """Drive an actual pseudo-terminal, not a mock of the menu logic."""
+        master, slave = pty.openpty()
+        try:
+            with os.fdopen(os.dup(slave), "r", encoding="utf-8", buffering=1) as terminal_in, \
+                 os.fdopen(os.dup(slave), "w", encoding="utf-8", buffering=1) as terminal_out:
+                chosen = []
+                def worker():
+                    with patch("cryptovideoresearch.interactive.sys.stdin", terminal_in), \
+                         patch("cryptovideoresearch.interactive.sys.stdout", terminal_out):
+                        chosen.append(choose("B", ["新闻", "YouTuber", "退出"]))
+                thread = threading.Thread(target=worker, daemon=True)
+                thread.start()
+                # The sequence moves the default highlight down once.
+                os.write(master, b"\\x1b[B\\r")
+                thread.join(timeout=3)
+                self.assertFalse(thread.is_alive(), "Arrow selection did not finish")
+                self.assertEqual(chosen, [1])
+        finally:
+            os.close(master)
+            os.close(slave)
 
     def test_settings_and_channels_are_persistent_and_private(self):
         with tempfile.TemporaryDirectory() as directory:
