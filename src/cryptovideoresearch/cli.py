@@ -146,6 +146,28 @@ def cmd_news(args: argparse.Namespace) -> int:
     return run_news(argv)
 
 
+def cmd_youtube_news(args: argparse.Namespace) -> int:
+    """Discover YouTube market-news explainers; optional paid video analysis."""
+    from .youtube_news import main as run_youtube_news
+
+    root = Path(__file__).resolve().parents[2]
+    config = Path(args.config).expanduser() if args.config else root / "youtube_news_queries.json"
+    output = Path(args.output).expanduser() if args.output else root / "outputs/youtube-news"
+    argv = [
+        "--config", str(config), "--output", str(output),
+        "--hours", str(args.hours), "--per-query", str(args.per_query),
+        "--max-results", str(args.max_results), "--min-seconds", str(args.min_seconds),
+        "--analyze-top", str(args.analyze_top), "--cookies", args.cookies,
+    ]
+    if args.fixture:
+        argv.extend(["--fixture", args.fixture])
+    if args.refresh:
+        argv.append("--refresh")
+    if args.model:
+        argv.extend(["--model", args.model])
+    return run_youtube_news(argv)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cryptovideo",
@@ -167,6 +189,19 @@ def build_parser() -> argparse.ArgumentParser:
     news.add_argument("--limit", type=int, default=100, help="Maximum report items")
     news.add_argument("--fixture", help="Offline RSS XML fixture for repeatable testing")
     news.set_defaults(handler=cmd_news)
+    ytnews = sub.add_parser("youtube-news", help="Search YouTube for market-news videos (no paid APIs by default)")
+    ytnews.add_argument("--config", help="Override youtube_news_queries.json")
+    ytnews.add_argument("--output", help="Output directory for video candidates and optional analyses")
+    ytnews.add_argument("--hours", type=int, default=168, help="Exclude known-old uploads; unknown times remain labeled")
+    ytnews.add_argument("--per-query", type=int, default=8, help="YouTube search result count per query")
+    ytnews.add_argument("--max-results", type=int, default=15, help="Maximum video candidates")
+    ytnews.add_argument("--min-seconds", type=int, default=90, help="Skip very short videos when duration is known")
+    ytnews.add_argument("--analyze-top", type=int, default=0, help="Analyze top N videos with Summarize + DeepSeek (paid)")
+    ytnews.add_argument("--cookies", choices=("none", "chrome", "firefox", "chromium", "brave"), default="none")
+    ytnews.add_argument("--model", help="Model name if analyzing")
+    ytnews.add_argument("--fixture", help="Offline YouTube search JSON fixture")
+    ytnews.add_argument("--refresh", action="store_true", help="Re-analyze existing summaries")
+    ytnews.set_defaults(handler=cmd_youtube_news)
     for command in ("analyze", "analyze-file"):
         p = sub.add_parser(command, help="Analyze a YouTube URL or an existing transcript")
         if command == "analyze":
