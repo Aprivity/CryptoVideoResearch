@@ -50,7 +50,10 @@ class InteractiveTests(unittest.TestCase):
                 # sending keys; otherwise the PTY's canonical mode may buffer.
                 self.assertTrue(select.select([master], [], [], 2)[0])
                 os.read(master, 8192)
-                os.write(master, b"\\x1b[B\\r")
+                os.write(master, b"\\x1b[B")
+                self.assertTrue(select.select([master], [], [], 2)[0])
+                os.read(master, 8192)  # updated highlighted menu after arrow
+                os.write(master, b"\\r")
                 thread.join(timeout=3)
                 self.assertFalse(thread.is_alive(), "Arrow selection did not finish")
                 self.assertEqual(chosen, [1])
