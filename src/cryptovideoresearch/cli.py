@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import json
 import os
 import shutil
 import subprocess
@@ -206,8 +207,18 @@ def cmd_run(args: argparse.Namespace) -> int:
     code = run_youtube_news(argv)
     if code == 0:
         print(f"\nVideo candidate index: {output / 'latest.md'}")
-        for report in sorted((output / "videos").glob("*/analysis.md")):
-            print(f"Video report: {report}")
+        metadata = output / "latest.json"
+        if metadata.is_file():
+            details = json.loads(metadata.read_text(encoding="utf-8"))
+            present = [
+                record for record in details.get("analyses", [])
+                if record.get("status") in ("cached", "analyzed")
+            ]
+            for item in present:
+                print(f"Video report ({item['status']}): {item['analysis_file']}")
+            if args.count and not present:
+                print("[NOTICE] No report produced. Read latest.md for missing dates, "
+                      "unavailable subtitles or YouTube access errors.")
     return code
 
 
