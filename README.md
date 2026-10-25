@@ -8,7 +8,7 @@
 bash -c 'set -o pipefail; curl -fsSL https://raw.githubusercontent.com/Aprivity/CryptoVideoResearch/feat/v0.3-one-command-bootstrap/scripts/bootstrap.sh | bash'
 ~~~
 
-脚本自动安装依赖、创建虚拟环境、在终端安全配置 DeepSeek API Key、运行自检，并启动一次 B 新闻采集。之后直接使用 cryptovideo news；详细说明见 [BOOTSTRAP.md](BOOTSTRAP.md)。仅支持 Ubuntu 22.04/24.04；需要 curl（缺失时先通过 apt 安装）。新闻分析与后台持续监控仍属于后续阶段。
+脚本自动安装依赖、创建虚拟环境、在终端安全配置 DeepSeek API Key、运行自检，并启动一次 B 新闻采集。之后直接使用 cryptovideo news；详细说明见 [BOOTSTRAP.md](BOOTSTRAP.md)。仅支持 Ubuntu 22.04/24.04/26.04；需要 curl（缺失时先通过 apt 安装）。新闻分析与后台持续监控仍属于后续阶段。
 
 
 YouTube 投资视频字幕提取与观点整理的开源工具。**研究资料收集，不提供投资建议、交易信号，也不执行交易。**
