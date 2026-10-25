@@ -23,4 +23,4 @@ cryptovideo = "cryptovideoresearch.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-cryptovideoresearch = ["py.typed"]
+cryptovideoresearch = ["py.typed", "data/finance_entities.json"]
