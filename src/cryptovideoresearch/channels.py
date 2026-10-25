@@ -39,6 +39,8 @@ def normalize_channel(value: str) -> str:
     if parts.username or parts.password or parts.port or parts.query or parts.fragment:
         raise ValueError("频道链接不可携带登录信息、端口、参数或片段")
     path = unquote(parts.path).rstrip("/")
+    if path.endswith("/videos"):
+        path = path.removesuffix("/videos")
     if path.startswith("/@") and HANDLE.fullmatch(path[1:]):
         return f"https://www.youtube.com/{quote(path[1:], safe='@._-')}/videos"
     if CHANNEL_PATH.fullmatch(path) and path.count("/") in (2, 3):
@@ -54,9 +56,11 @@ def channel_slug(url: str) -> str:
     """Safe predictable directory name for isolated creator reports."""
     path = urlsplit(normalize_channel(url)).path.removesuffix("/videos").strip("/")
     name = path.split("/")[-1].lstrip("@")
-    # User handles may contain Unicode; percent encoding is stable, but
-    # directories use ASCII-only identifiers to avoid path traversal.
-    return re.sub(r"[^A-Za-z0-9_-]", "_", name)[:60] or "channel"
+    # ASCII label + hash avoids collisions between Unicode channel handles.
+    import hashlib
+    short_hash = hashlib.sha256(normalize_channel(url).encode("utf-8")).hexdigest()[:8]
+    label = re.sub(r"[^A-Za-z0-9_-]", "_", name)[:45] or "channel"
+    return f"{label}-{short_hash}"
 
 
 def list_channel_uploads(url: str, *, count: int = 30, cookies: str = "none") -> dict:
