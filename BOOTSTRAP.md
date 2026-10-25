@@ -5,10 +5,10 @@
 ## 只需执行一条命令
 
 ~~~bash
-bash -c 'set -o pipefail; curl -fsSL https://raw.githubusercontent.com/Aprivity/CryptoVideoResearch/feat/v0.3-one-command-bootstrap/scripts/bootstrap.sh | bash'
+bash -c 'set -o pipefail; curl -fsSL https://raw.githubusercontent.com/Aprivity/CryptoVideoResearch/a078f169ad8f62d2d2477d6109169650470d3a22/scripts/bootstrap.sh | bash'
 ~~~
 
-建议先阅读 [安装脚本](scripts/bootstrap.sh) 了解会安装什么内容；脚本从仓库新功能分支下载。
+建议先阅读 [安装脚本](scripts/bootstrap.sh) 了解会安装什么内容；脚本下载地址固定到已验证兼容 Ubuntu 26.04 的提交，避免分支路径上的旧缓存；脚本运行时仍会检出最新的 V0.3 功能分支。
 
 如果系统没有 curl，先运行：
 
