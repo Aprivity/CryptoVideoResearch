@@ -81,7 +81,7 @@ def _date(value: dict) -> str | None:
 # YouTube's search API does not return upload_date. This is only a *negative*
 # filter: recent-looking title dates do not verify the actual upload date.
 TITLE_DATE = re.compile(
-    r"(?<![0-9])(20[0-9]{2})[.\\/-]?\\s*(0?[1-9]|1[0-2])[.\\/-]?\\s*"
+    r"(?<![0-9])(20[0-9]{2})[./年-]?[ ]*(0?[1-9]|1[0-2])[./月-]?[ ]*"
     r"(0?[1-9]|[12][0-9]|3[01])(?:日)?(?![0-9])"
 )
 
