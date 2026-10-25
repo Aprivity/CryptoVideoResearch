@@ -391,11 +391,11 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
             errors.append(f"{video.id}: YouTube metadata reports no downloadable zh/en VTT caption tracks")
             results.append({"video_id": video.id, "status": "no-captions"})
             continue
+        if model_attempts >= n:
+            errors.append(f"Model call limit ({n}) reached; further paid analysis was not attempted.")
+            break
         try:
             transcript, source = extract_captions(video.url, folder, cookies=cookies, refresh=refresh)
-            if model_attempts >= n:
-                errors.append(f"Model call limit ({n}) reached; remaining videos skipped.")
-                break
             model_attempts += 1
             summary = analyze_transcript(transcript, model=model or DEFAULT_MODEL, prompt=prompt)
             report = write_report(
