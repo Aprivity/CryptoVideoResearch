@@ -80,3 +80,25 @@ ZIP 安装时，输出位于你解压的项目目录下的同名 `outputs/youtub
 ## 技术说明
 
 目前使用外部工具 `yt-dlp` + `Summarize`，以及 DeepSeek 云端 API。因此 Python 打包成单个可执行文件仍不能保证脱离 Node.js / 网络 / 账号环境独立运行。对于 Ubuntu，下载 ZIP + `bash run.sh` 是更透明、体积更小、维护成本更低的可执行方案；Windows .exe 需要单独实现 Windows 下的环境管理和打包验证。
+
+## 搜索成功但没有生成报告：字幕可用性
+
+如果日志显示 `[PASS] videos=20 ... analyzed=0`，且 `latest.md` 报告 `No valid complete subtitle file was obtained`，表示**YouTube 视频搜索正常，但候选视频没有可下载的字幕，或者网络／Cookies 无法下载字幕**。不会自动将视频简介当作逐字稿，也不代表 DeepSeek Key 无效。
+
+V0.5 已增加区域中文字幕匹配及最多检查 10 条候选（当 `--count 1` 时），并优先识别视频元数据内可用的 VTT 字幕轨。若仍没有可用字幕，则本次不会产生单视频报告。
+
+诊断具体视频是否提供字幕：
+
+```bash
+~/.local/bin/yt-dlp --skip-download --js-runtimes node --list-subs --cookies-from-browser chrome 'https://www.youtube.com/watch?v=l9yIi3iYiU0'
+```
+
+这条命令不会下载视频或调用 DeepSeek。检查是否显示 `zh`、`zh-TW`、`zh-CN`、`en` 的 VTT 字幕轨。也可不加 `--cookies-from-browser chrome` 比较匿名访问的结果。若 YouTube 根本没有字幕，这不是下载器能保证修复的；后续需要独立的音频转写（如可选本地 ASR）功能。
+
+在已有 V0.5 Git 仓库中升级字幕改进，无须重新部署依赖：
+
+```bash
+cd ~/CryptoVideoResearch
+git pull --ff-only
+bash run.sh --count 1 --cookies chrome
+```
