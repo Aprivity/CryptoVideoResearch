@@ -90,3 +90,23 @@ cd ~/CryptoVideoResearch
 ```
 
 CI 覆盖了默认回车、数字菜单选项、设置持久化、频道链接安全校验、按频道提取上传视频以及旧命令兼容。方向键需要在真实 Ubuntu 终端中做交互验收，CI 无法模拟所有终端环境。
+
+## 6. 已正确找到频道，但显示 reports=0
+
+例如日志出现 `[OK] YouTuber 频道: 30 video candidates` 和 `reports=0`：频道定位和公开视频列表读取成功，但**没有完成单视频 AI 报告**。这不等于“频道没有视频”，也不能仅凭输出断定 DeepSeek Key 有问题。
+
+首先在交互菜单「运行设置」核对 **Cookies 来源**：交互版初始是 `none`（匿名访问），而用户此前可能通过 `--cookies chrome` 登录环境成功取得字幕。确实已在 Chrome 登录的情况下，可以将 Cookies 改为 `chrome`，保存后再选同一频道。
+
+升级后的程序会直接在终端列出提取失败的具体视频 ID、错误类型，及本轮 `no-captions`、其他失败的数量。标题虽然有很多候选，也不代表每个视频都允许下载 VTT 字幕。字幕缺失时不会使用视频简介冒充逐字稿。
+
+可选择命令行复现问题（无需改动你的菜单设置）：
+
+```bash
+cd ~/CryptoVideoResearch
+git pull --ff-only
+cryptovideo run --channel https://www.youtube.com/channel/UCGpj3DO_5_TUDCNUgS9mjiQ/videos --count 1 --cookies chrome
+```
+
+若仍失败，查看对应频道独立目录下的 `latest.md`、`latest.json`，其中 `analyses` 字段逐条记录 `no-captions` 或 `failed`，`errors` 记录原因。还可以使用 `yt-dlp --list-subs --cookies-from-browser chrome <视频链接>` 单独确认视频是否有可用的字幕轨道。
+
+当前版本**没有**本地音频自动转写（ASR）功能。若频道视频没有可用字幕，后续需要单独引入音频下载与本地转写模块，不能单靠视频搜索解决。
