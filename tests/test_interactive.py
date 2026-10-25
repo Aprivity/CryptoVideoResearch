@@ -19,7 +19,7 @@ from cryptovideoresearch.cli import build_parser
 from cryptovideoresearch.interactive import (
     choose, load_settings, remember_channel, save_settings,
 )
-from cryptovideoresearch.youtube_news import main as news_main
+from cryptovideoresearch.youtube_news import Video, analyze_selected, main as news_main
 
 
 class InteractiveTests(unittest.TestCase):
@@ -132,6 +132,62 @@ class InteractiveTests(unittest.TestCase):
             data = json.loads((Path(directory) / "latest.json").read_text(encoding="utf-8"))
             self.assertEqual([v["id"] for v in data["videos"]],
                              ["ZWrgUWKOq_0", "abc123DEF_0"])
+
+    def test_creator_prefers_captioned_uploads_to_uncaptioned_top_items(self):
+        from cryptovideoresearch.pipeline import PipelineError
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def video(vid, status):
+                return Video(
+                    id=vid, title="视频标题", channel="Creator",
+                    url=f"https://www.youtube.com/watch?v={vid}", topic="YouTuber 频道",
+                    published_at_utc=None, duration_seconds=300, views=None,
+                    relevance_score=0, time_status="unknown", caption_status=status,
+                )
+            videos = [
+                video("ZWrgUWKOq_0", "none"),
+                video("abc123DEF_0", "unknown"),
+                video("abcdefghijk", "available"),
+            ]
+            transcript = root / "temp.vtt"
+            transcript.write_text("WEBVTT\\nplaceholder", encoding="utf-8")
+            with patch("cryptovideoresearch.youtube_news.extract_captions",
+                       return_value=(transcript, "uploaded")) as extract, \
+                 patch("cryptovideoresearch.youtube_news.analyze_transcript",
+                       return_value="新闻相关性：无具体事件\\n纯技术解读") as model, \
+                 patch("cryptovideoresearch.youtube_news.write_report",
+                       return_value=root / "report.md"):
+                result = analyze_selected(
+                    videos, root, 1, "none", False, "", [], accept_no_news=True,
+                )
+            self.assertEqual(result[0]["video_id"], "abcdefghijk")
+            self.assertEqual(result[0]["status"], "analyzed-no-news")
+            extract.assert_called_once()
+            model.assert_called_once()
+
+    def test_creator_probes_subtitles_even_if_metadata_reports_none(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            v = Video(
+                id="ZWrgUWKOq_0", title="财经分析", channel="Creator",
+                url="https://www.youtube.com/watch?v=ZWrgUWKOq_0",
+                topic="YouTuber 频道", published_at_utc=None, duration_seconds=900,
+                views=None, relevance_score=0, time_status="unknown", caption_status="none",
+            )
+            transcript = root / "valid.vtt"
+            transcript.write_text("WEBVTT\\nplaceholder", encoding="utf-8")
+            with patch("cryptovideoresearch.youtube_news.extract_captions",
+                       return_value=(transcript, "uploaded")) as extractor, \
+                 patch("cryptovideoresearch.youtube_news.analyze_transcript",
+                       return_value="博主观点") as model, \
+                 patch("cryptovideoresearch.youtube_news.write_report",
+                       return_value=root / "analysis.md"):
+                result = analyze_selected(
+                    [v], root, 1, "none", False, "", [], accept_no_news=True,
+                )
+            self.assertEqual(result[0]["status"], "analyzed")
+            extractor.assert_called_once()
+            model.assert_called_once()
 
     def test_backward_compatibility_run_accepts_channel_flag(self):
         args = build_parser().parse_args(["run", "--channel", "@creator123", "--count", "1"])
