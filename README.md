@@ -1,5 +1,33 @@
 # CryptoVideoResearch
 
+## V0.6 · B 工作流交互式 CLI
+
+**默认搜索市场新闻，或明确指定 YouTuber 并保留选择。** Ubuntu 终端直接运行：
+
+```bash
+cryptovideo
+# 或进入源码目录
+bash run.sh
+```
+
+回车（不输入）默认执行市场新闻搜索和各视频独立分析；按 **↑ / ↓ + 回车** 或 **数字键** 切换选项。输入 YouTuber 的 `@handle`、官方 YouTube 频道链接，或名称并从搜索结果中确认频道；保存的频道可重复选择、也可以删除。每个频道独立保存报告；设置（每轮 DeepSeek 调用次数、时间范围、Cookies、严格时效）自动保存到用户本地配置，**不会提交到 Git**。
+
+```text
+❯ [1] 搜索市场新闻（默认，回车）
+  [2] 输入 YouTuber 名称 / @handle / 链接
+  [3] 已保存的 YouTuber
+  [4] 运行设置
+  [5] 查看报告位置
+  [6] 退出
+```
+
+旧命令继续支持：`cryptovideo run --count 1 --cookies chrome` 和 `bash run.sh --count 1`；脚本和自动化环境不显示交互菜单。也可直接指定 `cryptovideo run --channel @YourHandle --count 1`。
+
+详细教程：[INTERACTIVE_CLI.md](INTERACTIVE_CLI.md)。
+
+---
+
+
 **V0.5 — 一键生成独立的 YouTube 市场新闻视频研究报告。** 不提供投资建议、交易信号或下单能力。
 
 ## 从零使用（Ubuntu 22.04 / 24.04 / 26.04）
