@@ -163,3 +163,36 @@ curl --max-time 10 -I --proxy http://127.0.0.1:7890 https://pypi.org/simple/pyso
   'https://www.youtube.com/watch?v=DiDuGTf_-0g' \
   --cookies chrome --asr-model base --output-dir ./outputs/asr-validation
 ```
+
+## 八、PyAV `metadata_errors` 与 faster-whisper 解码兼容性（2026-10）
+
+真实语音转写中可能出现：
+
+```text
+Local ASR failed: open() got an unexpected keyword argument 'metadata_errors'
+```
+
+这不是 Hugging Face API token 问题（`HF_TOKEN` 仅影响下载配额），而是已知的 **faster-whisper 1.2.1 与 PyAV 19.x** 兼容性问题：旧解码器调用 `av.open(..., metadata_errors="ignore")`，PyAV 19 移除了这个参数。对应上游修复议题：https://github.com/SYSTRAN/faster-whisper/issues/1589 。
+
+V0.7 目前使用可选依赖约束 `av>=11,<19`；`asr-setup` 已修改为**即使 faster-whisper 和 SOCKS 依赖都存在，也会检查 PyAV 版本**。发现 19+ 时重新安装兼容版本。更新源码后执行：
+
+```bash
+cd ~/CryptoVideoResearch
+git pull --ff-only
+./.venv/bin/python -m pip show av faster-whisper
+./.venv/bin/cryptovideo asr-setup
+./.venv/bin/python -m pip show av faster-whisper
+```
+
+如 pip 仍受本地 SOCKS 代理影响，使用前文提供的 `--pip-proxy http://127.0.0.1:<HTTP_PORT>`，端口必须实际支持 HTTP/mixed 服务。你也可以在 pip 能访问依赖源的环境中直接执行 `./.venv/bin/python -m pip install 'av>=11,<19'`。
+
+然后重试无需调用 DeepSeek 的本地语音识别：
+
+```bash
+./.venv/bin/cryptovideo transcribe \
+  'https://www.youtube.com/watch?v=DiDuGTf_-0g' \
+  --cookies chrome --asr-model base \
+  --output-dir ./outputs/asr-validation
+```
+
+转写失败前保留的音频可以被复用，通常无需重新下载。只有真正生成了有效 VTT，才说明音频解码和转写成功；在线模型下载成功本身不代表语音识别成功。以后当新版 faster-whisper 已明确兼容 PyAV 19+ 时，再评估移除上限。
