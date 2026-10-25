@@ -24,6 +24,6 @@ jobs:
       - name: Syntax check
         run: |
           python -m compileall -q src
-          bash -n scripts/install.sh scripts/doctor.sh scripts/claude-deepseek.sh scripts/bootstrap.sh
+          bash -n scripts/install.sh scripts/doctor.sh scripts/claude-deepseek.sh scripts/bootstrap.sh run.sh
       - name: Unit tests (offline)
         run: python -m unittest discover -s tests -v
