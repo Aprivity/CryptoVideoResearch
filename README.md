@@ -5,7 +5,7 @@
 无需预先配置 Python、Node.js、Summarize 或 yt-dlp；准备好网络和 sudo 权限，执行：
 
 ~~~bash
-bash -c 'set -o pipefail; curl -fsSL https://raw.githubusercontent.com/Aprivity/CryptoVideoResearch/feat/v0.3-one-command-bootstrap/scripts/bootstrap.sh | bash'
+bash -c 'set -o pipefail; curl -fsSL https://raw.githubusercontent.com/Aprivity/CryptoVideoResearch/a078f169ad8f62d2d2477d6109169650470d3a22/scripts/bootstrap.sh | bash'
 ~~~
 
 脚本自动安装依赖、创建虚拟环境、在终端安全配置 DeepSeek API Key、运行自检，并启动一次 B 新闻采集。之后直接使用 cryptovideo news；详细说明见 [BOOTSTRAP.md](BOOTSTRAP.md)。仅支持 Ubuntu 22.04/24.04/26.04；需要 curl（缺失时先通过 apt 安装）。新闻分析与后台持续监控仍属于后续阶段。
