@@ -109,7 +109,7 @@ class DualReportTests(unittest.TestCase):
             self.assertIn("原始字幕", extra)
             self.assertIn("CoreWeave", extra)
             self.assertIn("禁止直接替换", extra)
-            self.assertIn("非外部证据", extra)
+            self.assertIn("没有外部事实核验", extra)
 
     def test_model_fast_section_separated_without_losing_legacy_classifier(self):
         full, bullets, ranked = split_model_report(MODEL)
