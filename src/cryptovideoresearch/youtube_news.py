@@ -137,7 +137,7 @@ def merge_videos(items: list[Video], limit: int) -> list[Video]:
     unique_titles: set[str] = set()
     output: list[Video] = []
     for video in ranked:
-        key = re.sub(r"[^\\w\\u4e00-\\u9fff]+", "", video.title.casefold())
+        key = re.sub(r"[^\w\u4e00-\u9fff]+", "", video.title.casefold())
         if key in unique_titles:
             continue
         unique_titles.add(key)
