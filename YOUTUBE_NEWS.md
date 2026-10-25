@@ -29,6 +29,25 @@ python -m unittest discover -s tests -v
 
 本模块只检索 **YouTube**，不请求 Google News、CoinDesk 或美联储 RSS。之前的 `cryptovideo news` 命令保留为可选遗留入口，但不是 B 的默认管线。
 
+## V0.4.1：发布日期二次核查与筛选
+
+真实 YouTube 检索显示，yt-dlp 的 flat 搜索结果通常没有发布日期。因此 `--hours 168` **无法单凭搜索页面保证最近七天**。现对排名前五的视频自动执行完整元数据核查：
+
+```bash
+# 搜索后对前 5 个候选读取元数据，剔除确认过期的结果，不调用 DeepSeek
+cryptovideo youtube-news --hours 168 --verify-top 5
+
+# 对更多候选核查日期，可能需要更久，但不会触发模型费用
+cryptovideo youtube-news --hours 168 --verify-top 10
+
+# 若只想快速搜索、暂时不查日期，可禁用二次核查
+cryptovideo youtube-news --verify-top 0
+```
+
+**默认安全限制：** `--analyze-top N` 只分析已确认处于窗口内且拥有日期的候选；日期缺失时会跳过付费分析并报告原因。只有用户明确使用 `--allow-unknown-age` 才允许分析日期未知的视频。日期核查不代表事实核验：它只确认该视频报告的发布信息，不会验证视频声称的经济数据。
+
+重复视频 ID 和基本相同的标题会去重，明显夸张的标题会降权。检索相关度不等同于权威性或真实性。二次核查请求仍依赖 YouTube 可用性和 Cookies、网络环境；失败时保留“未知”标记。
+
 ## 新闻内容提取
 
 `--analyze-top 2` 是显式付费步骤：调用现有 `yt-dlp` 获取字幕，继而执行 `Summarize + DeepSeek`，使用 `prompts/youtube_news_zh.md` 专用提取规则区分：
