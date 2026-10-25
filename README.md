@@ -1,30 +1,38 @@
 # CryptoVideoResearch
 
-## B：YouTube 市场新闻发现（V0.4 预览）
+**V0.5 — 一键生成独立的 YouTube 市场新闻视频研究报告。** 不提供投资建议、交易信号或下单能力。
 
-本项目的 B 工作流现默认以 **YouTube 搜索** 为新闻解读视频入口，不再先采集 Google News / RSS 标题。原 RSS 模块保留为可选入口。详见 [YOUTUBE_NEWS.md](YOUTUBE_NEWS.md)。
+## 从零使用（Ubuntu 22.04 / 24.04 / 26.04）
+
+**方法 1：下载 ZIP。** 在 <https://github.com/Aprivity/CryptoVideoResearch/tree/feat/v0.5-one-command-reports> 点击 Code → Download ZIP，解压后进入该目录，执行：
 
 ```bash
-# YouTube 搜索/筛选，不调用付费模型
-cryptovideo youtube-news --hours 168
-
-# 前 2 个候选调用 Summarize + DeepSeek，可能消耗 API 额度
-cryptovideo youtube-news --analyze-top 2 --cookies chrome
+bash run.sh
 ```
 
-YouTube 视频中的新闻叙述并不等于经过独立核验的事实；本工具会区分事件转述与博主观点，并标注未知发布时间。
+首次运行会检查并安装缺失依赖，提示输入 DeepSeek API Key，然后搜索 YouTube 并默认生成最多两份单独的视频分析报告。后续仍执行 `bash run.sh` 即可。
 
-## Ubuntu 全新系统：一键安装（实验功能分支）
+**方法 2：从完全空白的 Ubuntu 终端安装并立即生成报告：**
 
-无需预先配置 Python、Node.js、Summarize 或 yt-dlp；准备好网络和 sudo 权限，执行：
+```bash
+sudo apt-get update && sudo apt-get install -y curl && curl -fL --retry 3 -o /tmp/cvr-install.sh https://raw.githubusercontent.com/Aprivity/CryptoVideoResearch/0554f7d98ba0a2a3688083b08d6f5869921bc907/scripts/bootstrap.sh && bash /tmp/cvr-install.sh
+```
 
-~~~bash
-bash -c 'set -o pipefail; curl -fsSL https://raw.githubusercontent.com/Aprivity/CryptoVideoResearch/cc61df0ab46bbf5535eb1975b457c25a4f1af45d/scripts/bootstrap.sh | bash'
-~~~
+安装后，后续只需：
 
-脚本自动安装依赖、创建虚拟环境、在终端安全配置 DeepSeek API Key、运行自检，并启动一次 B 的 YouTube 市场新闻视频发现。之后直接使用 cryptovideo news；详细说明见 [BOOTSTRAP.md](BOOTSTRAP.md)。仅支持 Ubuntu 22.04/24.04/26.04；需要 curl（缺失时先通过 apt 安装）。新闻分析与后台持续监控仍属于后续阶段。
+```bash
+cryptovideo run
+# 改成 3 份报告：cryptovideo run --count 3
+# 若需要本机 Chrome 已登录的 Cookies：cryptovideo run --cookies chrome
+```
 
+报告索引：`outputs/youtube-news/latest.md`；视频独立报告：`outputs/youtube-news/videos/<视频ID>/analysis.md`。
 
+首次部署需要 sudo 权限和网络连接。DeepSeek 分析会产生 API 费用，默认每次至多 2 次模型调用尝试；已成功分析的视频复用缓存。YouTube 搜索视频的发布时间可能未知，默认允许在标注未知日期的前提下分析；需要严格时间约束可使用 `--strict-dates`。
+
+完整使用说明：[QUICKSTART.md](QUICKSTART.md)；视频研究模块：[YOUTUBE_NEWS.md](YOUTUBE_NEWS.md)；安装器源码：[scripts/bootstrap.sh](scripts/bootstrap.sh)。Windows `.exe` 尚未打包，本分支优先支持 Ubuntu。
+
+---
 YouTube 投资视频字幕提取与观点整理的开源工具。**研究资料收集，不提供投资建议、交易信号，也不执行交易。**
 
 **V0.1 已实现的范围：** Ubuntu 下通过 yt-dlp 获取字幕，通过 [Summarize](https://github.com/steipete/summarize) 调用 DeepSeek 官方 OpenAI 兼容 API，生成带来源信息的 Markdown 分析报告和 JSON 任务记录。暂不支持批量发现、策略回测、外部事实核验或无人值守登录。
@@ -44,7 +52,7 @@ outputs/<video-id>/report.json
 
 刻意采用 **外部依赖**，不 Fork Summarize 或 yt-dlp；便于升级并减少维护。字幕不可用时直接失败，**不会把 YouTube 页面简介误判为完整字幕**。
 
-## Ubuntu 快速部署
+## 旧版手动部署方式（开发者可选）
 
 环境要求：Ubuntu、Python 3.10+、Node.js 24+、npm、支持本机浏览器 Cookie 的桌面环境（Cookie 可选）。首次安装需要联网，可能需要 sudo。
 
