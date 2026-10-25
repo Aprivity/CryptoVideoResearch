@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fresh Ubuntu 22.04/24.04 bootstrap. Requires network, curl and sudo/root.
+# Fresh Ubuntu 22.04/24.04/26.04 bootstrap. Requires network, curl and sudo/root.
 # The API key is requested securely by the existing cryptovideo setup command.
 set -Eeuo pipefail
 
@@ -18,12 +18,12 @@ die()  { printf '\n[ERROR] %s\n' "$*" >&2; exit 1; }
 cleanup() { if [[ -n "$TMP" && -d "$TMP" ]]; then rm -rf "$TMP"; fi; }
 trap cleanup EXIT
 
-[[ -r /etc/os-release ]] || die "Only Ubuntu 22.04/24.04 is supported"
+[[ -r /etc/os-release ]] || die "Only Ubuntu 22.04/24.04/26.04 is supported"
 source /etc/os-release
 [[ "$ID" == ubuntu ]] || die "Only Ubuntu is supported (found $ID)"
 case "$VERSION_ID" in
-  22.04|24.04) ;;
-  *) die "Ubuntu 22.04/24.04 required; found $VERSION_ID" ;;
+  22.04|24.04|26.04) ;;
+  *) die "Ubuntu 22.04/24.04/26.04 required; found $VERSION_ID" ;;
 esac
 [[ "$TARGET" == /* && "$TARGET" != "/" ]] || die "Install directory must be absolute and not /"
 command -v curl >/dev/null 2>&1 || die "curl is required for bootstrap"
