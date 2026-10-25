@@ -158,11 +158,14 @@ def cmd_youtube_news(args: argparse.Namespace) -> int:
         "--hours", str(args.hours), "--per-query", str(args.per_query),
         "--max-results", str(args.max_results), "--min-seconds", str(args.min_seconds),
         "--analyze-top", str(args.analyze_top), "--cookies", args.cookies,
+        "--verify-top", str(args.verify_top),
     ]
     if args.fixture:
         argv.extend(["--fixture", args.fixture])
     if args.refresh:
         argv.append("--refresh")
+    if args.allow_unknown_age:
+        argv.append("--allow-unknown-age")
     if args.model:
         argv.extend(["--model", args.model])
     return run_youtube_news(argv)
@@ -196,6 +199,8 @@ def build_parser() -> argparse.ArgumentParser:
     ytnews.add_argument("--per-query", type=int, default=8, help="YouTube search result count per query")
     ytnews.add_argument("--max-results", type=int, default=15, help="Maximum video candidates")
     ytnews.add_argument("--min-seconds", type=int, default=90, help="Skip very short videos when duration is known")
+    ytnews.add_argument("--verify-top", type=int, default=5, help="Verify upload dates on top N candidates; 0 disables (faster)")
+    ytnews.add_argument("--allow-unknown-age", action="store_true", help="Explicitly allow paid analysis of undated videos")
     ytnews.add_argument("--analyze-top", type=int, default=0, help="Analyze top N videos with Summarize + DeepSeek (paid)")
     ytnews.add_argument("--cookies", choices=("none", "chrome", "firefox", "chromium", "brave"), default="none")
     ytnews.add_argument("--model", help="Model name if analyzing")
