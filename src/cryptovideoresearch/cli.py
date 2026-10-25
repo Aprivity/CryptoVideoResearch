@@ -105,6 +105,13 @@ def cmd_login(args: argparse.Namespace) -> int:
     return 0
 
 
+def require_asr_runtime() -> None:
+    """Fail early before requesting video audio when the optional extra is absent."""
+    from .asr import available
+    if not available():
+        raise PipelineError("Local ASR runtime is not installed. Run: cryptovideo asr-setup")
+
+
 def cmd_transcribe(args: argparse.Namespace) -> int:
     """Free-of-DeepSeek subtitle extraction with optional local ASR fallback."""
     from .pipeline import NoCaptionsError
@@ -114,9 +121,8 @@ def cmd_transcribe(args: argparse.Namespace) -> int:
             args.url, root, cookies=args.cookies, refresh=False,
         )
     except NoCaptionsError:
-        from .asr import available, transcribe_video
-        if not available():
-            raise PipelineError("Local ASR is not installed. Run: cryptovideo asr-setup")
+        require_asr_runtime()
+        from .asr import transcribe_video
         transcript, source = transcribe_video(
             args.url, root, cookies=args.cookies,
             model=args.asr_model, device=args.asr_device,
@@ -141,6 +147,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     except NoCaptionsError:
         if not args.asr_fallback:
             raise
+        require_asr_runtime()
         from .asr import transcribe_video
         transcript, source = transcribe_video(
             args.url, root, cookies=args.cookies, model=args.asr_model,
@@ -206,6 +213,8 @@ def cmd_news(args: argparse.Namespace) -> int:
 
 def cmd_youtube_news(args: argparse.Namespace) -> int:
     """Discover YouTube market-news explainers; optional paid video analysis."""
+    if args.asr_fallback and args.analyze_top > 0:
+        require_asr_runtime()
     from .youtube_news import main as run_youtube_news
 
     root = Path(__file__).resolve().parents[2]
@@ -248,6 +257,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     # successful/cached reports. Never repeat paid work when a report exists.
     if args.count > 0:
         load_key()  # Fail before YouTube requests if no DeepSeek key.
+        if args.asr_fallback:
+            require_asr_runtime()
     from .youtube_news import main as run_youtube_news
 
     root = Path(__file__).resolve().parents[2]
