@@ -137,7 +137,7 @@ class DualReportTests(unittest.TestCase):
             self.assertIn("## 金融实体与识别质量提示", full.read_text(encoding="utf-8"))
             self.assertIn("核心", full.read_text(encoding="utf-8") or "核心")
             self.assertIn("## 最重要的事件与观点", quick.read_text(encoding="utf-8"))
-            self.assertIn("疑似识别错误", quick.read_text(encoding="utf-8"))
+            self.assertIn("低置信度术语", quick.read_text(encoding="utf-8"))
             self.assertIn("[查看完整研究报告](analysis.md)", quick.read_text(encoding="utf-8"))
             metadata = json.loads((full.parent / "report.json").read_text(encoding="utf-8"))
             self.assertEqual(metadata["fast_summary_origin"], "model-ranked")
