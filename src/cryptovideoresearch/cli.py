@@ -244,7 +244,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         )
     print(f"Transcript: {transcript} ({source})", file=sys.stderr)
     summary = analyze_transcript(
-        transcript, model=args.model,
+        transcript, model=args.model, subtitle_source=source,
         prompt=Path(args.prompt).expanduser() if args.prompt else None,
     )
     report = write_report(
@@ -252,7 +252,9 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         transcript=transcript, subtitle_source=source,
         summary=summary, model=args.model,
     )
-    print(f"Saved: {report}")
+    print(f"Saved full report: {report}")
+    print(f"Saved 1-minute summary: {report.parent / 'quick.md'}")
+    print(f"Financial term review: {report.parent / 'finance_quality.json'}")
     print(f"Metadata: {report.parent / 'report.json'}")
     return 0
 
@@ -272,7 +274,7 @@ def cmd_analyze_file(args: argparse.Namespace) -> int:
         raise PipelineError("--video-id must be an 11-character YouTube video ID")
     root = Path(args.output_dir).expanduser().resolve()
     summary = analyze_transcript(
-        transcript, model=args.model,
+        transcript, model=args.model, subtitle_source="local-file",
         prompt=Path(args.prompt).expanduser() if args.prompt else None,
     )
     report = write_report(
@@ -280,7 +282,9 @@ def cmd_analyze_file(args: argparse.Namespace) -> int:
         transcript=transcript, subtitle_source="local-file",
         summary=summary, model=args.model,
     )
-    print(f"Saved: {report}")
+    print(f"Saved full report: {report}")
+    print(f"Saved 1-minute summary: {report.parent / 'quick.md'}")
+    print(f"Financial term review: {report.parent / 'finance_quality.json'}")
     return 0
 
 
@@ -404,6 +408,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         for item in present:
             print(f"Video report ({item['status']}, {item.get('classification', 'unclassified')}): "
                   f"{item['analysis_file']}")
+            if item.get("quick_file"):
+                print(f"  1-minute summary: {item['quick_file']}")
         if args.count and not present:
             print("[NOTICE] No report produced. Read latest.md for missing dates, "
                   "unavailable subtitles or YouTube access errors.")
