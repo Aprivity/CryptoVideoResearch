@@ -349,7 +349,7 @@ def classify_report(summary: str) -> str:
     """
     beginning = summary[:2000]
     label = re.search(
-        r"(?:^|\\n)\\s*(?:\\*\\*)?新闻相关性[：:]\\s*(有具体事件|无具体事件|无法判断)",
+        r"(?:^|\n)\s*(?:\*\*)?新闻相关性[：:]\s*(有具体事件|无具体事件|无法判断)",
         beginning,
     )
     if label:
