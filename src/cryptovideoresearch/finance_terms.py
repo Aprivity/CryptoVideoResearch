@@ -88,6 +88,8 @@ def assess_transcript(transcript: Path, *, subtitle_source: str = "unknown") -> 
                 "timestamp": timestamp, "match_kind": kind,
                 "label": "needs-listening-review" if kind == "suspect"
                          else "lexicon-exact-candidate",
+                "lexicon_match_certainty": "low-text-heuristic" if kind == "suspect"
+                                           else "exact-spelling-candidate",
             }
             if kind == "suspect":
                 flagged.append(item)
@@ -164,7 +166,7 @@ def quality_markdown(review: dict, *, max_items: int = 4) -> list[str]:
             f"{'疑似 ' + item['canonical'] if item.get('canonical') else '实体不明确'}）"
             for item in flags[:max_items]
         )
-        result.append("**疑似识别错误，需回听：**" + details
+        result.append("**低置信度术语（词表启发式，需回听）：**" + details
                       + ("；另有更多见 finance_quality.json" if len(flags) > max_items else ""))
     num = review.get("number_mentions_to_check", [])
     if num:
