@@ -132,7 +132,7 @@ def parse_results(raw: dict, *, topic: str, query: str, hours: int, now: datetim
         # Do not waste DeepSeek calls on obviously old historical programmes.
         # e.g. 20220810, 20230314, 2026.7.25, 20230731 in a video title.
         # This is a title-date heuristic, NOT confirmation of upload time.
-        if published is None and old_title_date(title, now=now, hours=hours):
+        if topic != "YouTuber 频道" and published is None and old_title_date(title, now=now, hours=hours):
             continue
         if published:
             # A YYYY-MM-DD upload date carries no timezone/time-of-day.
