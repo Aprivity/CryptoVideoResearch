@@ -80,11 +80,12 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 def cmd_asr_setup(args: argparse.Namespace) -> int:
     """Install the opt-in ASR dependency, without downloading model weights."""
     from .asr import available
-    if available():
-        print("[OK] faster-whisper is already installed.")
+    from importlib.util import find_spec
+    if available() and find_spec("socksio") is not None:
+        print("[OK] faster-whisper and HTTPX SOCKS proxy support are already installed.")
         return 0
     root = Path(__file__).resolve().parents[2]
-    print("[ASR] Installing optional faster-whisper runtime via pip.")
+    print("[ASR] Installing or upgrading optional faster-whisper and SOCKS proxy support via pip.")
     print("[ASR] Model weights will only download upon your first ASR transcription.")
     completed = subprocess.run(
         [sys.executable, "-m", "pip", "install", "-e", f"{root}[asr]"],
