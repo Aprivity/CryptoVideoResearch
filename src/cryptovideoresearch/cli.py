@@ -105,6 +105,29 @@ def cmd_login(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_transcribe(args: argparse.Namespace) -> int:
+    """Free-of-DeepSeek subtitle extraction with optional local ASR fallback."""
+    from .pipeline import NoCaptionsError
+    root = Path(args.output_dir).expanduser().resolve()
+    try:
+        transcript, source = extract_captions(
+            args.url, root, cookies=args.cookies, refresh=False,
+        )
+    except NoCaptionsError:
+        from .asr import available, transcribe_video
+        if not available():
+            raise PipelineError("Local ASR is not installed. Run: cryptovideo asr-setup")
+        transcript, source = transcribe_video(
+            args.url, root, cookies=args.cookies,
+            model=args.asr_model, device=args.asr_device,
+            keep_audio=args.keep_audio, refresh=False,
+        )
+    print(f"[OK] Transcript source: {source}")
+    print(f"[OK] Transcript file: {transcript}")
+    print("[INFO] No DeepSeek calls were made.")
+    return 0
+
+
 def cmd_analyze(args: argparse.Namespace) -> int:
     load_key()  # Fail fast before requesting the video.
     video_id = youtube_video_id(args.url)
@@ -334,6 +357,14 @@ def build_parser() -> argparse.ArgumentParser:
     ytnews.add_argument("--asr-device", choices=("cpu", "cuda"), default="cpu")
     ytnews.add_argument("--keep-audio", action="store_true", help="Retain source audio after successful ASR")
     ytnews.set_defaults(handler=cmd_youtube_news)
+    transcribe = sub.add_parser("transcribe", help="Get video captions or local ASR transcript (no DeepSeek call)")
+    transcribe.add_argument("url", help="Single YouTube video URL")
+    transcribe.add_argument("--cookies", choices=("none", "chrome", "firefox", "chromium", "brave"), default="none")
+    transcribe.add_argument("--asr-model", choices=("tiny", "base", "small", "medium"), default="small")
+    transcribe.add_argument("--asr-device", choices=("cpu", "cuda"), default="cpu")
+    transcribe.add_argument("--keep-audio", action="store_true")
+    transcribe.add_argument("--output-dir", default="./outputs/asr-validation")
+    transcribe.set_defaults(handler=cmd_transcribe)
     run = sub.add_parser("run", help="One command: search YouTube and generate separate AI video reports")
     run.add_argument("--count", type=int, choices=range(1, 6), default=2,
                      metavar="{1..5}", help="Number of successful/cached reports to produce (default 2)")
