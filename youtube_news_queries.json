@@ -1,0 +1,8 @@
+{
+  "queries": [
+    {"topic": "BTC 与加密市场", "query": "比特币 BTC 今日新闻 美联储 市场解读"},
+    {"topic": "BTC 与加密市场", "query": "Bitcoin crypto market news analysis today"},
+    {"topic": "美联储与宏观", "query": "美联储 CPI PPI 通胀 美股 市场最新解读"},
+    {"topic": "AI 与半导体", "query": "英伟达 美光 AI 半导体 最新新闻 财报 分析"}
+  ]
+}
