@@ -4,7 +4,7 @@
 set -Eeuo pipefail
 
 APP="CryptoVideoResearch"
-BRANCH="${CVR_BRANCH:-feat/v0.3-one-command-bootstrap}"
+BRANCH="${CVR_BRANCH:-feat/v0.4-youtube-news}"
 REPO="https://github.com/Aprivity/CryptoVideoResearch.git"
 TARGET="${CVR_INSTALL_DIR:-$HOME/CryptoVideoResearch}"
 LOCAL_BIN="$HOME/.local/bin"
@@ -156,12 +156,12 @@ note "Running local self-check"
 "$TARGET/.venv/bin/cryptovideo" doctor ||
   warn "Doctor reported missing components; review the output above"
 
-note "Running B: news intake once (no scheduled background monitoring)"
-if "$TARGET/.venv/bin/cryptovideo" news --hours 72; then
-  note "Report created: $TARGET/outputs/news/latest.md"
+note "Running B: YouTube news video discovery once (no scheduled background monitoring)"
+if "$TARGET/.venv/bin/cryptovideo" youtube-news --hours 168; then
+  note "Report created: $TARGET/outputs/youtube-news/latest.md"
 else
-  warn "Network RSS scan failed; install succeeded. Retry: cryptovideo news --hours 72"
+  warn "YouTube search failed; install succeeded. Retry: cryptovideo youtube-news"
 fi
 
 note "Ready"
-printf 'Project: %s\nNews: cryptovideo news --hours 72\nVideo: cryptovideo analyze URL --cookies chrome\nStatus: cryptovideo doctor\n' "$TARGET"
+printf 'Project: %s\nNews videos: cryptovideo youtube-news --hours 168\nVideo: cryptovideo analyze URL --cookies chrome\nStatus: cryptovideo doctor\n' "$TARGET"
