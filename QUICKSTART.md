@@ -1,3 +1,21 @@
+# V0.6：推荐使用交互式 B 工作流
+
+本分支已经新增 [交互式 CLI](INTERACTIVE_CLI.md)，无需记忆参数：
+
+```bash
+# Ubuntu 终端，直接回车默认搜索市场新闻
+cryptovideo
+
+# 下载 ZIP 解压后，从目录启动同一交互界面
+bash run.sh
+```
+
+使用数字键，或上下方向键 + 回车；按 `2` 输入 YouTuber 名称、`@handle` 或频道链接，运行后自动保存该频道及设置。保留纯命令行版本：`cryptovideo run --count 1`、`cryptovideo run --channel @YourHandle --count 1`。
+
+以下内容为 V0.5 的旧版非交互使用说明；已安装 V0.5 的用户切换至 `feat/v0.6-interactive-cli` 后使用新菜单即可。
+
+---
+
 # CryptoVideoResearch V0.5 · 一键视频报告
 
 面向 Ubuntu 22.04、24.04、26.04；包含 B 工作流（YouTube 市场新闻视频搜索、单独分析和报告存储）。目前**没有 Windows .exe**，不要把 Linux 的 run.sh 当成 Windows 程序。
