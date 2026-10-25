@@ -25,6 +25,16 @@ class PipelineError(RuntimeError):
     """Expected user-facing extraction or analysis failure."""
 
 
+class YouTubeAccessError(PipelineError):
+    """YouTube requests verification; caption availability is still unknown."""
+
+
+def youtube_auth_challenge(details: str) -> bool:
+    """Detect the explicit YouTube bot challenge without guessing caption status."""
+    lower = details.casefold().replace("’", "'")
+    return "sign in to confirm" in lower and "not a bot" in lower
+
+
 def youtube_video_id(url: str) -> str:
     parts = urlsplit(url)
     host = (parts.hostname or "").lower()
@@ -70,6 +80,14 @@ def checked_run(
         raise PipelineError(f"Command timed out after {timeout}s: {command[0]}") from exc
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "No diagnostic output").strip()[-1400:]
+        if Path(command[0]).name == "yt-dlp" and youtube_auth_challenge(detail):
+            raise YouTubeAccessError(
+                "YouTube requires sign-in/bot verification, so subtitle availability "
+                "cannot be checked. Sign in to YouTube in a supported browser and "
+                "select that browser in B Settings (e.g. Cookies: chrome); "
+                "if it still fails, do not repeatedly retry anonymous requests. "
+                f"yt-dlp: {detail[-500:]}"
+            )
         raise PipelineError(f"{command[0]} exited {result.returncode}: {detail}")
     return result
 
@@ -132,6 +150,10 @@ def extract_captions(
             command[1:1] = ["--cookies-from-browser", cookies]
         try:
             checked_run(command, timeout=180)
+        except YouTubeAccessError:
+            # The login challenge is not evidence of missing subtitles.
+            # Trying the alternative --write-auto-subs mode only repeats it.
+            raise
         except PipelineError as exc:
             errors.append(str(exc))
             continue
