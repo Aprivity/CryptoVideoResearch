@@ -184,7 +184,8 @@ def default_prompt_path() -> Path:
 
 
 def analyze_transcript(
-    transcript: Path, *, model: str = DEFAULT_MODEL, prompt: Path | None = None
+    transcript: Path, *, model: str = DEFAULT_MODEL, prompt: Path | None = None,
+    subtitle_source: str = "unknown",
 ) -> str:
     if not transcript.is_file():
         raise PipelineError(f"Transcript file not found: {transcript}")
@@ -202,12 +203,18 @@ def analyze_transcript(
     binary = shutil.which("summarize")
     if binary is None:
         raise PipelineError("Summarize CLI missing; run scripts/install.sh")
+    # Finance terms are spelling *candidates* only. Original VTT is intact,
+    # and the context is clearly separated from spoken text.
+    from .finance_terms import assess_transcript, context_for_model
+    review = assess_transcript(transcript, subtitle_source=subtitle_source)
+    finance_context = context_for_model(review)
+    model_input = (finance_context + "\n" + content) if finance_context else content
     command = [
         binary, "-", "--model", "openai/" + model,
         "--prompt-file", str(prompt_path), "--language", "zh",
         "--length", "long", "--force-summary", "--plain", "--timeout", "5m",
     ]
-    result = checked_run(command, input_text=content, timeout=420, env=make_model_env())
+    result = checked_run(command, input_text=model_input, timeout=420, env=make_model_env())
     output = result.stdout.strip()
     if len(output) < 30:
         raise PipelineError("AI returned empty or unusually short output")
@@ -223,9 +230,11 @@ def write_report(
     folder = output_root / video_id
     folder.mkdir(parents=True, exist_ok=True)
     report_path = folder / "analysis.md"
-    tmp_path = folder / "analysis.md.tmp"
-    tmp_path.write_text(summary, encoding="utf-8")
-    tmp_path.replace(report_path)
+    from .report_outputs import create_companions
+    companions = create_companions(
+        report_path, summary=summary, transcript=transcript,
+        subtitle_source=subtitle_source,
+    )
     payload = {
         "schema_version": "0.1.0",
         "video_id": video_id,
@@ -237,6 +246,7 @@ def write_report(
         "verification_status": "unverified",
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "disclaimer": "Research extraction only; not investment advice.",
+        **companions,
     }
     json_tmp = folder / "report.json.tmp"
     json_tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
