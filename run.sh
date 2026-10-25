@@ -18,7 +18,7 @@ if [[ "$#" -eq 0 ]]; then
   exec "$ROOT/.venv/bin/cryptovideo" menu
 fi
 case "$1" in
-  menu|run|doctor|setup|analyze|analyze-file|youtube-news|news|login)
+  menu|run|doctor|setup|asr-setup|analyze|analyze-file|youtube-news|news|login)
     exec "$ROOT/.venv/bin/cryptovideo" "$@" ;;
   *)
     exec "$ROOT/.venv/bin/cryptovideo" run "$@" ;;
