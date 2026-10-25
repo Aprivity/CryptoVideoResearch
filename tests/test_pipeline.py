@@ -64,6 +64,19 @@ class PipelineTests(unittest.TestCase):
             self.assertIn("--cookies-from-browser", commands[0])
             self.assertIn("chrome", commands[0])
 
+    def test_regional_chinese_caption_tags_supported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            def fake_run(command, **_kwargs):
+                self.assertIn("zh.*,en.*", command)
+                target = Path(directory) / "ZWrgUWKOq_0" / "ZWrgUWKOq_0.zh-TW.vtt"
+                target.write_text(TEST_VTT, encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, "", "")
+            with patch("cryptovideoresearch.pipeline.find_ytdlp", return_value="/fake/yt-dlp"), \
+                 patch("cryptovideoresearch.pipeline.checked_run", side_effect=fake_run):
+                path, source = extract_captions("https://youtu.be/ZWrgUWKOq_0", Path(directory))
+            self.assertEqual(source, "uploaded")
+            self.assertTrue(path.name.endswith(".zh-TW.vtt"))
+
     def test_analysis_uses_deepseek_and_no_claude(self):
         with tempfile.TemporaryDirectory() as directory:
             vtt = Path(directory) / "test.vtt"
