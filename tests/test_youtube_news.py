@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from cryptovideoresearch.cli import build_parser
 from cryptovideoresearch.youtube_news import (
-    find_videos, main, merge_videos, parse_results,
+    find_videos, main, merge_videos, parse_results, verify_video_dates,
 )
 
 FIXTURE = Path(__file__).parent / "fixtures/youtube_search.json"
@@ -63,6 +63,40 @@ class YouTubeNewsTests(unittest.TestCase):
             self.assertEqual(second["discovery_new"], 0)
             self.assertEqual(second["source"], "youtube-search")
             self.assertEqual(second["analyses"], [])
+
+    def test_metadata_verification_removes_stale_video(self):
+        now = datetime(2026, 10, 25, 9, tzinfo=timezone.utc)
+        raw = json.loads(FIXTURE.read_text(encoding="utf-8"))
+        selected = parse_results(raw, topic="BTC 与加密市场", query="news",
+                                 hours=72, now=now)
+        with patch("cryptovideoresearch.youtube_news.fetch_video_metadata",
+                   return_value={"id": "ZWrgUWKOq_0", "upload_date": "20200101"}):
+            validated = verify_video_dates(selected, count=1, cookies="none",
+                                           hours=72, now=now, errors=[])
+        self.assertNotIn("ZWrgUWKOq_0", {v.id for v in validated})
+
+    def test_metadata_verification_preserves_recent_date(self):
+        now = datetime(2026, 10, 25, 9, tzinfo=timezone.utc)
+        raw = json.loads(FIXTURE.read_text(encoding="utf-8"))
+        selected = parse_results(raw, topic="BTC 与加密市场", query="news",
+                                 hours=72, now=now)
+        with patch("cryptovideoresearch.youtube_news.fetch_video_metadata",
+                   return_value={"id": "ZWrgUWKOq_0", "upload_date": "20261024"}):
+            validated = verify_video_dates(selected, count=1, cookies="none",
+                                           hours=72, now=now, errors=[])
+        target = next(v for v in validated if v.id == "ZWrgUWKOq_0")
+        self.assertEqual(target.published_at_utc, "2026-10-24")
+        self.assertEqual(target.time_status, "date-only")
+
+    def test_identical_titles_deduplicate_across_channel_ids(self):
+        now = datetime(2026, 10, 25, 9, tzinfo=timezone.utc)
+        source = {"entries": [
+            {"id": "ZWrgUWKOq_0", "title": "Bitcoin news analysis", "channel": "channel A"},
+            {"id": "abc123DEF_0", "title": "Bitcoin News Analysis!!!", "channel": "channel B"},
+        ]}
+        items = parse_results(source, topic="BTC 与加密市场", query="news",
+                              hours=72, now=now)
+        self.assertEqual(len(merge_videos(items, 20)), 1)
 
     def test_corrupted_fixture_preserves_existing_report(self):
         with tempfile.TemporaryDirectory() as folder:
