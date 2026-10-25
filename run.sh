@@ -12,4 +12,14 @@ if [[ ! -x "$ROOT/.venv/bin/cryptovideo" ]]; then
 fi
 
 cd "$ROOT"
-exec "$ROOT/.venv/bin/cryptovideo" run "$@"
+# No arguments: launch interactive B menu. Legacy flag-only usage remains
+# supported, e.g. bash run.sh --count 1 --cookies chrome.
+if [[ "$#" -eq 0 ]]; then
+  exec "$ROOT/.venv/bin/cryptovideo" menu
+fi
+case "$1" in
+  menu|run|doctor|setup|analyze|analyze-file|youtube-news|news|login)
+    exec "$ROOT/.venv/bin/cryptovideo" "$@" ;;
+  *)
+    exec "$ROOT/.venv/bin/cryptovideo" run "$@" ;;
+esac
