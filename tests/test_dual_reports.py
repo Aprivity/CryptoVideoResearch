@@ -170,6 +170,42 @@ class DualReportTests(unittest.TestCase):
             self.assertIn("quick_file", meta)
             self.assertIn("finance_quality_file", meta)
 
+    def test_cli_upgrade_existing_analysis_preserves_file_and_never_calls_model(self):
+        from cryptovideoresearch.cli import build_parser
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            report = folder / "analysis.md"
+            report.write_text(LEGACY, encoding="utf-8")
+            vtt = folder / "captions.vtt"
+            vtt.write_text(VTT, encoding="utf-8")
+            (folder / "report.json").write_text(json.dumps({
+                "subtitle_file": str(vtt), "subtitle_source": "local-asr",
+                "verification_status": "unverified",
+            }), encoding="utf-8")
+            command = build_parser().parse_args(["upgrade-report", str(report)])
+            with patch("cryptovideoresearch.pipeline.analyze_transcript") as model:
+                self.assertEqual(command.handler(command), 0)
+            model.assert_not_called()
+            self.assertEqual(report.read_text(encoding="utf-8"), LEGACY)
+            self.assertTrue((folder / "quick.md").is_file())
+
+    def test_fewer_than_three_real_model_highlights_are_not_fabricated(self):
+        one = MODEL.replace(
+            "- **[观点]** 作者质疑融资缺口，00:00:05；可信度：原字幕术语需回听. ",
+            ""
+        )
+        one = one.replace(
+            "- **[观点]** 作者质疑融资缺口，00:00:05；可信度：原字幕术语需回听。\n", ""
+        ).replace(
+            "- **[事件]** 视频转述美国运通财报，00:00:10；可信度：未经外部核验。\n", ""
+        ).replace(
+            "- **[观点]** 关注融资成本压力，00:00:05；可信度：博主个人判断。\n", ""
+        )
+        full, bullets, ranked = split_model_report(one)
+        self.assertTrue(ranked)
+        self.assertEqual(len(bullets), 1)
+        self.assertNotIn("## 一分钟速览", full)
+
     def test_fallback_does_not_invent_3_to_5_points(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
