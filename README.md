@@ -1,5 +1,27 @@
 # CryptoVideoResearch
 
+## V0.7 · 本地 ASR 语音转写回退
+
+B 模块现在可以在 **YouTube 原生字幕不可用时，选择性使用本地 `faster-whisper` 将单视频音频转成带时间戳的 VTT，再用 DeepSeek 生成原有的独立报告**。本地语音识别不按分钟收取云端转写费用；DeepSeek 视频分析仍调用网络 API。详细说明见 [LOCAL_ASR.md](LOCAL_ASR.md)。
+
+- 默认 **ASR 关闭**，现有字幕分析不受影响。
+- 交互菜单 `cryptovideo` →「运行设置」→「无字幕时启用本地 ASR」，首次运行会明确询问是否安装可选依赖。
+- 也可使用 `cryptovideo asr-setup` 主动安装依赖；实际首次转写时再下载模型到本机缓存。
+- 无字幕时才下载音频，不下载画面；模型默认 `small` + CPU `int8`，也可切换 `tiny/base/medium`、选择有对应驱动环境的 CUDA。
+- 转写成 `videos/<视频ID>/local-asr-small.vtt`，默认完成后清理音频，保存 VTT 供以后重复分析；可选保留音频。
+- 遇到 YouTube 登录/验证限制，程序仍然停止请求，不会尝试通过音频绕过访问限制。
+
+```bash
+# 菜单模式
+bash run.sh
+
+# 无界面脚本模式：启用可选本地 ASR，最多 1 次 DeepSeek 调用
+cryptovideo run --channel @YourHandle --cookies chrome --count 1 --asr-fallback
+```
+
+---
+
+
 ## V0.6 · B 工作流交互式 CLI
 
 **默认搜索市场新闻，或明确指定 YouTuber 并保留选择。** Ubuntu 终端直接运行：
