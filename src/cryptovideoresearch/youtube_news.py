@@ -239,7 +239,8 @@ def fetch_video_metadata(video: Video, *, cookies: str = "none") -> dict:
 
 
 def verify_video_dates(videos: list[Video], *, count: int, cookies: str,
-                       hours: int, now: datetime, errors: list[str]) -> list[Video]:
+                       hours: int, now: datetime, errors: list[str],
+                       preserve_order: bool = False) -> list[Video]:
     """Verify the highest-ranked candidates, remove confirmed-old videos.
 
     Unverified candidates remain explicitly undated but are never selected
@@ -280,6 +281,8 @@ def verify_video_dates(videos: list[Video], *, count: int, cookies: str,
         except (PipelineError, OSError, ValueError, TypeError) as exc:
             errors.append(f"Metadata {video.id}: {str(exc)[:160]}")
         kept.append(video)
+    if preserve_order:
+        return kept  # A channel's /videos playlist is already reverse chronological.
     # Verified freshness ranks above merely relevant undated titles.
     return sorted(kept, key=lambda v: (
         v.published_at_utc is not None,
@@ -464,6 +467,7 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="YouTube market-news video discovery and optional Summarize analysis")
     parser.add_argument("--config", default="youtube_news_queries.json")
+    parser.add_argument("--channel", help="Use only uploads from this YouTuber channel URL or @handle")
     parser.add_argument("--output", default="outputs/youtube-news")
     parser.add_argument("--fixture", help="Use local yt-dlp search JSON for offline testing")
     parser.add_argument("--per-query", type=int, default=8)
@@ -481,8 +485,12 @@ def main(argv: list[str] | None = None) -> int:
             and 1 <= args.hours <= 8760 and 0 <= args.min_seconds <= 3600
             and 0 <= args.analyze_top <= 10 and 0 <= args.verify_top <= 30):
         parser.error("Invalid query/results/hours/min-seconds/analyze-top setting")
+    from .channels import list_channel_uploads, normalize_channel
     try:
-        if args.fixture:
+        if args.channel:
+            channel_url = normalize_channel(args.channel)
+            sources = [{"topic": "YouTuber 频道", "query": channel_url}]
+        elif args.fixture:
             sources = [{"topic": "BTC 与加密市场", "query": "fixture"}]
             fixture_data = json.loads(Path(args.fixture).read_text(encoding="utf-8"))
         else:
@@ -503,7 +511,15 @@ def main(argv: list[str] | None = None) -> int:
             errors.append("Empty topic or query skipped")
             continue
         try:
-            raw = fixture_data if args.fixture else find_videos(query, args.per_query, cookies=args.cookies)
+            if args.fixture and not args.channel:
+                raw = fixture_data
+            elif args.channel:
+                raw = list_channel_uploads(
+                    query, count=min(100, args.max_results + args.verify_top),
+                    cookies=args.cookies,
+                )
+            else:
+                raw = find_videos(query, args.per_query, cookies=args.cookies)
             items = parse_results(raw, topic=topic, query=query, hours=args.hours,
                                   now=now, min_seconds=args.min_seconds)
             succeeded += 1
@@ -515,12 +531,22 @@ def main(argv: list[str] | None = None) -> int:
     if not succeeded:
         print("[FAIL] All YouTube searches failed; old report preserved.", file=sys.stderr)
         return 1
-    # Retain some replacements in case high-ranked search results turn out old.
-    videos = merge_videos(found, min(100, args.max_results + args.verify_top))
+    if args.channel:
+        # Do not rank a creator's uploads using the general market news title
+        # keywords: retain chronological playlist ordering and exact channel.
+        ids: set[str] = set()
+        videos = []
+        for item in found:
+            if item.id not in ids:
+                ids.add(item.id)
+                videos.append(item)
+    else:
+        videos = merge_videos(found, min(100, args.max_results + args.verify_top))
     if not args.fixture and args.verify_top:
-        videos = verify_video_dates(videos, count=args.verify_top,
-                                   cookies=args.cookies, hours=args.hours,
-                                   now=now, errors=errors)
+        videos = verify_video_dates(
+            videos, count=args.verify_top, cookies=args.cookies, hours=args.hours,
+            now=now, errors=errors, preserve_order=bool(args.channel),
+        )
     videos = videos[:args.max_results]
     output = Path(args.output).expanduser().resolve()
     new_count = remember(output / "seen.db", videos)
