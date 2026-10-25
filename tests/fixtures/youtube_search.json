@@ -1,0 +1,32 @@
+{
+  "id": "ytsearch:fixture",
+  "entries": [
+    {
+      "id": "ZWrgUWKOq_0",
+      "title": "BTC 比特币市场新闻解读：CPI 与美联储",
+      "channel": "测试频道",
+      "duration": 740,
+      "view_count": 1200
+    },
+    {
+      "id": "abc123DEF_0",
+      "title": "市场新闻：美联储政策与美股分析",
+      "channel": "测试频道二",
+      "duration": 820,
+      "upload_date": "20261024"
+    },
+    {
+      "id": "short123450",
+      "title": "比特币新闻快讯",
+      "channel": "短视频",
+      "duration": 30
+    },
+    {
+      "id": "old12345678",
+      "title": "BTC 七年前的旧新闻",
+      "channel": "历史节目",
+      "duration": 940,
+      "upload_date": "20200101"
+    }
+  ]
+}
