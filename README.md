@@ -1,5 +1,16 @@
 # CryptoVideoResearch
 
+## Ubuntu 全新系统：一键安装（实验功能分支）
+
+无需预先配置 Python、Node.js、Summarize 或 yt-dlp；准备好网络和 sudo 权限，执行：
+
+~~~bash
+bash -c 'set -o pipefail; curl -fsSL https://raw.githubusercontent.com/Aprivity/CryptoVideoResearch/feat/v0.3-one-command-bootstrap/scripts/bootstrap.sh | bash'
+~~~
+
+脚本自动安装依赖、创建虚拟环境、在终端安全配置 DeepSeek API Key、运行自检，并启动一次 B 新闻采集。之后直接使用 cryptovideo news；详细说明见 [BOOTSTRAP.md](BOOTSTRAP.md)。仅支持 Ubuntu 22.04/24.04；需要 curl（缺失时先通过 apt 安装）。新闻分析与后台持续监控仍属于后续阶段。
+
+
 YouTube 投资视频字幕提取与观点整理的开源工具。**研究资料收集，不提供投资建议、交易信号，也不执行交易。**
 
 **V0.1 已实现的范围：** Ubuntu 下通过 yt-dlp 获取字幕，通过 [Summarize](https://github.com/steipete/summarize) 调用 DeepSeek 官方 OpenAI 兼容 API，生成带来源信息的 Markdown 分析报告和 JSON 任务记录。暂不支持批量发现、策略回测、外部事实核验或无人值守登录。
