@@ -44,6 +44,7 @@ class Video:
     relevance_score: int
     time_status: str
     matched_queries: list[str] = field(default_factory=list)
+    caption_status: str = "unknown"  # "available" | "none" | "unknown"
 
 
 def _date(value: dict) -> str | None:
@@ -206,13 +207,28 @@ def verify_video_dates(videos: list[Video], *, count: int, cookies: str,
                 video.channel = str(data.get("channel") or data.get("uploader") or "未知频道")
             if video.duration_seconds is None and isinstance(data.get("duration"), (int, float)):
                 video.duration_seconds = int(data["duration"])
+            # Full video metadata includes actual subtitle tracks. YouTube search
+            # results do not. This is a hint, not a guarantee of downloadability.
+            manual = data.get("subtitles")
+            automatic = data.get("automatic_captions")
+            if isinstance(manual, dict) and isinstance(automatic, dict):
+                tracks = {**manual, **automatic}
+                video.caption_status = (
+                    "available" if any(
+                        str(lang).startswith(("zh", "en")) and
+                        any(isinstance(item, dict) and item.get("ext") == "vtt"
+                            for item in formats)
+                        for lang, formats in tracks.items() if isinstance(formats, list)
+                    ) else "none"
+                )
         except (PipelineError, OSError, ValueError, TypeError) as exc:
             errors.append(f"Metadata {video.id}: {str(exc)[:160]}")
         kept.append(video)
     # Verified freshness ranks above merely relevant undated titles.
     return sorted(kept, key=lambda v: (
-        v.published_at_utc is not None, v.relevance_score,
-        v.published_at_utc or "",
+        v.published_at_utc is not None,
+        v.caption_status == "available",
+        v.relevance_score, v.published_at_utc or "",
     ), reverse=True)
 
 
@@ -287,7 +303,7 @@ def render(output: Path, videos: list[Video], *, new_count: int,
         duration = str(video.duration_seconds) + " 秒" if video.duration_seconds is not None else "未知"
         lines += [
             f"{index}. [{video.title.replace(chr(10), ' ')}]({video.url})",
-            f"   - 频道：{video.channel}｜类别：{video.topic}｜发布时间：{time_label}｜时长：{duration}｜检索相关度：{video.relevance_score}",
+            f"   - 频道：{video.channel}｜类别：{video.topic}｜发布时间：{time_label}｜时长：{duration}｜检索相关度：{video.relevance_score}｜字幕：{video.caption_status}",
             f"   - 匹配检索：{'; '.join(video.matched_queries)}",
         ]
     if analyzed:
@@ -314,7 +330,9 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
     completed = 0
     model_attempts = 0
     # Try replacements if captions fail; never exceed N model API attempts.
-    max_candidates = min(len(videos), max(n * 3, n + 2))
+    # A few attractive headlines may have no YouTube captions at all.
+    # Search deeper rather than quitting after 3 misses for --count 1.
+    max_candidates = min(len(videos), max(n * 10, n + 2))
     for video in videos[:max_candidates]:
         if completed >= n:
             break
@@ -322,6 +340,10 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
         if target.is_file() and not refresh:
             results.append({"video_id": video.id, "status": "cached", "analysis_file": str(target)})
             completed += 1
+            continue
+        if video.caption_status == "none":
+            errors.append(f"{video.id}: YouTube metadata reports no downloadable zh/en VTT caption tracks")
+            results.append({"video_id": video.id, "status": "no-captions"})
             continue
         try:
             transcript, source = extract_captions(video.url, folder, cookies=cookies, refresh=refresh)
