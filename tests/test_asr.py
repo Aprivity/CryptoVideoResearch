@@ -14,7 +14,7 @@ from cryptovideoresearch.asr import (
     cached_asr, download_audio, format_timestamp, normalized_proxy_environment,
     transcribe_audio, transcribe_video,
 )
-from cryptovideoresearch.cli import build_parser
+from cryptovideoresearch.cli import asr_pip_environment, build_parser
 from cryptovideoresearch.pipeline import (
     NoCaptionsError, PipelineError, YouTubeAccessError, prefer_caption,
     valid_vtt,
@@ -77,6 +77,55 @@ class ASRTests(unittest.TestCase):
         self.assertEqual(fixed["ALL_PROXY"], "socks5://127.0.0.1:7890")
         self.assertEqual(fixed["https_proxy"], source["https_proxy"])
         self.assertEqual(fixed["NO_PROXY"], "localhost")
+
+    def test_pip_bootstrap_uses_local_http_on_socks_only_environment(self):
+        source = {
+            "HTTP_PROXY": "socks://127.0.0.1:7890",
+            "HTTPS_PROXY": "socks://127.0.0.1:7890",
+            "ALL_PROXY": "socks://127.0.0.1:7890",
+            "NO_PROXY": "localhost",
+        }
+        env, reason = asr_pip_environment(source, pip_socks_available=False)
+        self.assertEqual(env["HTTPS_PROXY"], "http://127.0.0.1:7890")
+        self.assertEqual(env["ALL_PROXY"], "http://127.0.0.1:7890")
+        self.assertEqual(env["http_proxy"], "http://127.0.0.1:7890")
+        self.assertEqual(env["NO_PROXY"], "localhost")
+        self.assertEqual(source["HTTP_PROXY"], "socks://127.0.0.1:7890")
+        self.assertIn("temporary local HTTP", reason)
+
+    def test_pip_bootstrap_respects_explicit_http_proxy_and_rejects_socks(self):
+        source = {"ALL_PROXY": "socks://127.0.0.1:7890"}
+        env, mode = asr_pip_environment(
+            source, pip_proxy="http://127.0.0.1:7891", pip_socks_available=False,
+        )
+        self.assertEqual(env["ALL_PROXY"], "http://127.0.0.1:7891")
+        self.assertEqual(mode, "explicit HTTP(S) proxy")
+        for invalid in (
+            "socks5://127.0.0.1:7890", "http://user:pass@127.0.0.1:7890",
+            "https://127.0.0.1:7890/?next=1",
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(PipelineError):
+                asr_pip_environment(source, pip_proxy=invalid)
+
+    def test_pip_bootstrap_rejects_nonlocal_sockshost_without_http_listener(self):
+        with self.assertRaises(PipelineError):
+            asr_pip_environment({"HTTPS_PROXY": "socks5://proxy.example.test:1080"},
+                                pip_socks_available=False)
+
+    def test_asr_setup_direct_install_avoids_isolated_project_build(self):
+        from cryptovideoresearch.cli import cmd_asr_setup
+        from argparse import Namespace
+        env = {"HTTPS_PROXY": "socks://127.0.0.1:7890"}
+        with patch.dict(os.environ, env), \
+             patch("cryptovideoresearch.asr.available", return_value=False), \
+             patch("cryptovideoresearch.cli.subprocess.run",
+                   return_value=subprocess.CompletedProcess([], 0, "", "")) as pip:
+            self.assertEqual(cmd_asr_setup(Namespace(pip_proxy="http://127.0.0.1:7890")), 0)
+        args, kwargs = pip.call_args
+        self.assertIn("faster-whisper>=1.1,<2", args[0])
+        self.assertIn("httpx[socks]>=0.27,<1", args[0])
+        self.assertNotIn("-e", args[0])
+        self.assertEqual(kwargs["env"]["HTTPS_PROXY"], "http://127.0.0.1:7890")
 
     def test_legacy_socks_proxy_normalized_only_during_whisper_model_load(self):
         from cryptovideoresearch.asr import PROXY_ENV_KEYS
