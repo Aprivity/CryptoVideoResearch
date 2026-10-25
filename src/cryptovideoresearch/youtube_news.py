@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .pipeline import (
-    PipelineError, YouTubeAccessError, analyze_transcript, checked_run,
+    PipelineError, NoCaptionsError, YouTubeAccessError, analyze_transcript, checked_run,
     extract_captions, find_ytdlp, write_report,
 )
 
@@ -429,13 +429,16 @@ def classify_report(summary: str) -> str:
 
 def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
                      refresh: bool, model: str, errors: list[str],
-                     accept_no_news: bool = False) -> list[dict]:
+                     accept_no_news: bool = False, asr_fallback: bool = False,
+                     asr_model: str = "small", asr_device: str = "cpu",
+                     keep_audio: bool = False) -> list[dict]:
     from .config import DEFAULT_MODEL
     prompt = Path(__file__).resolve().parents[2] / "prompts/youtube_news_zh.md"
     folder = output / "videos"
     results: list[dict] = []
     completed = 0
     model_attempts = 0
+    asr_attempts = 0
     # Try replacements if captions fail; never exceed N model API attempts.
     # A few attractive headlines may have no YouTube captions at all.
     # Search deeper rather than quitting after 3 misses for --count 1.
@@ -460,7 +463,7 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
             if kind != "no-news" or accept_no_news:
                 completed += 1
             continue
-        if video.caption_status == "none":
+        if video.caption_status == "none" and not asr_fallback:
             # Metadata is only a hint. For a specifically chosen creator,
             # probe a bounded number of 'none' videos before giving up.
             if not accept_no_news or forced_caption_probes >= max(1, n):
@@ -472,7 +475,22 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
             errors.append(f"Model call limit ({n}) reached; further paid analysis was not attempted.")
             break
         try:
-            transcript, source = extract_captions(video.url, folder, cookies=cookies, refresh=refresh)
+            try:
+                transcript, source = extract_captions(
+                    video.url, folder, cookies=cookies, refresh=False,
+                )
+            except NoCaptionsError:
+                if not asr_fallback:
+                    raise
+                if asr_attempts >= n:
+                    errors.append(f"ASR attempt limit ({n}) reached; further downloads skipped.")
+                    break
+                from .asr import transcribe_video
+                asr_attempts += 1
+                transcript, source = transcribe_video(
+                    video.url, folder, cookies=cookies, model=asr_model,
+                    device=asr_device, keep_audio=keep_audio, refresh=False,
+                )
             model_attempts += 1
             summary = analyze_transcript(transcript, model=model or DEFAULT_MODEL, prompt=prompt)
             report = write_report(
@@ -484,7 +502,8 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
             kind = classify_report(summary)
             status = "analyzed-no-news" if kind == "no-news" else "analyzed"
             results.append({"video_id": video.id, "status": status,
-                            "classification": kind, "analysis_file": str(report)})
+                            "classification": kind, "analysis_file": str(report),
+                            "transcript_source": source})
             if kind != "no-news":
                 completed += 1
         except YouTubeAccessError as exc:
@@ -523,6 +542,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--analyze-top", type=int, default=0, help="Explicitly call Summarize + DeepSeek for top N results; costs API credits")
     parser.add_argument("--model", help="Model used only if --analyze-top is nonzero")
     parser.add_argument("--refresh", action="store_true", help="Re-analyze already processed videos")
+    parser.add_argument("--asr-fallback", action="store_true",
+                        help="On missing native captions, download audio for optional local Whisper transcription")
+    parser.add_argument("--asr-model", choices=("tiny", "base", "small", "medium"), default="small")
+    parser.add_argument("--asr-device", choices=("cpu", "cuda"), default="cpu")
+    parser.add_argument("--keep-audio", action="store_true",
+                        help="Keep source audio after successful transcription (uses disk space)")
     args = parser.parse_args(argv)
     if not (1 <= args.per_query <= 30 and 1 <= args.max_results <= 100
             and 1 <= args.hours <= 8760 and 0 <= args.min_seconds <= 3600
@@ -609,16 +634,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.analyze_top and not args.allow_unknown_age and not candidates_for_analysis:
         errors.append("No confirmed recent videos for paid analysis; use --allow-unknown-age to override.")
-    analyzed = analyze_selected(candidates_for_analysis, output, args.analyze_top,
-                                args.cookies, args.refresh, args.model or "",
-                                errors, accept_no_news=bool(args.channel)) if args.analyze_top and candidates_for_analysis else []
+    analyzed = analyze_selected(
+        candidates_for_analysis, output, args.analyze_top,
+        args.cookies, args.refresh, args.model or "", errors,
+        accept_no_news=bool(args.channel),
+        asr_fallback=args.asr_fallback, asr_model=args.asr_model,
+        asr_device=args.asr_device, keep_audio=args.keep_audio,
+    ) if args.analyze_top and candidates_for_analysis else []
     render(output, videos, new_count=new_count, errors=errors,
            requested=len(sources), analyzed=analyzed,
            channel_url=channel_url if args.channel else None)
     successful = ('analyzed', 'cached', 'analyzed-no-news', 'cached-no-news') if args.channel else ('analyzed', 'cached')
     useful = sum(a['status'] in successful for a in analyzed)
     no_news = sum(a['status'] in ('analyzed-no-news', 'cached-no-news') for a in analyzed)
-    print(f"[PASS] videos={len(videos)} new={new_count} reports={useful} no_news={no_news} analyzed={sum(a['status'] == 'analyzed' for a in analyzed)} cached={sum(a['status'] == 'cached' for a in analyzed)}")
+    asr_count = sum(a.get("transcript_source") == "local-asr" for a in analyzed)
+    print(f"[PASS] asr={asr_count} videos={len(videos)} new={new_count} reports={useful} no_news={no_news} analyzed={sum(a['status'] == 'analyzed' for a in analyzed)} cached={sum(a['status'] == 'cached' for a in analyzed)}")
     print(f"Report: {output / 'latest.md'}")
     if args.analyze_top and useful == 0:
         subtitle_failures = sum(a['status'] == 'no-captions' for a in analyzed)
