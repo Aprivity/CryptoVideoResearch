@@ -69,6 +69,8 @@ def quick_markdown(full: str, ranked_bullets: list[str], *, from_model: bool,
     for bullet in chosen[:5]:
         if len(bullet) > 135:
             bullet = bullet[:132].rstrip() + "…（详情见完整报告）"
+        if not any(mark in bullet for mark in ("可信度", "未经核验", "未经独立核验", "未核实", "待回听")):
+            bullet += "｜可信度：仅视频转述，未独立核验"
         normalized.append(bullet)
     lines = [
         "# 一分钟快速摘要（未经核验）", "",
