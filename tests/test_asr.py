@@ -178,6 +178,29 @@ class ASRTests(unittest.TestCase):
             local.assert_not_called()
             deepseek.assert_not_called()
 
+    def test_standalone_transcribe_never_calls_deepseek(self):
+        with tempfile.TemporaryDirectory() as folder:
+            parser = build_parser()
+            args = parser.parse_args([
+                "transcribe", URL, "--cookies", "chrome",
+                "--asr-model", "base", "--output-dir", folder,
+            ])
+            transcript = Path(folder) / "local-asr-base.vtt"
+            transcript.write_text(
+                "WEBVTT\\n\\n00:00:00.000 --> 00:00:15.000\\n" + GOOD_TEXT,
+                encoding="utf-8",
+            )
+            with patch("cryptovideoresearch.cli.extract_captions",
+                       side_effect=NoCaptionsError("no subtitles")) as native, \
+                 patch("cryptovideoresearch.asr.available", return_value=True), \
+                 patch("cryptovideoresearch.asr.transcribe_video",
+                       return_value=(transcript, "local-asr")) as transcriber, \
+                 patch("cryptovideoresearch.cli.analyze_transcript") as deepseek:
+                self.assertEqual(args.handler(args), 0)
+            native.assert_called_once()
+            transcriber.assert_called_once()
+            deepseek.assert_not_called()
+
     def test_asr_is_opt_in_on_all_command_lines(self):
         parser = build_parser()
         standard = parser.parse_args(["run", "--count", "1"])
