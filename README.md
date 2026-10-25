@@ -63,6 +63,16 @@ export HTTP_PROXY=http://127.0.0.1:7890
 
 程序会向 Summarize 子进程设置 `NODE_USE_ENV_PROXY=1`，让 Node.js 24 使用环境代理。并不会改动系统代理。不要把账号凭据或私人代理 URL 提交到 Git。
 
+### 可选：让 Claude Code 使用 DeepSeek（不影响常规 Claude 配置）
+
+已安装 Claude Code 时，可以通过单独的启动器仅为该进程临时配置 DeepSeek Anthropic 兼容 API：
+
+```bash
+bash scripts/claude-deepseek.sh --print "仅回复：连接成功"
+```
+
+这并非 Summarize 必需步骤：本项目的摘要主链路直接调用 DeepSeek，不依赖 Claude Code。不要将 API Key 写入仓库，也不要假设任何账号都能免验证登录。
+
 ### 其他命令
 
 ```bash

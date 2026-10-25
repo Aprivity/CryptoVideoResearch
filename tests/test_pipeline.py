@@ -70,7 +70,7 @@ class PipelineTests(unittest.TestCase):
             prompt = Path(directory) / "prompt.md"
             vtt.write_text(TEST_VTT, encoding="utf-8")
             prompt.write_text("Summarize the captions", encoding="utf-8")
-            fake = subprocess.CompletedProcess(["summarize"], 0, "## 结论\n字幕提及市场震荡但没有策略参数，资料未经核实。\n", "")
+            fake = subprocess.CompletedProcess(["summarize"], 0, "## 结论\n字幕提及市场震荡但没有策略参数，资料未经核实，尚需结合其他公开来源确认客观数据。\n", "")
             with patch("cryptovideoresearch.pipeline.shutil.which", return_value="/fake/summarize"), \
                  patch("cryptovideoresearch.pipeline.make_model_env", return_value={"OPENAI_API_KEY": "dummy"}), \
                  patch("cryptovideoresearch.pipeline.checked_run", return_value=fake) as runner:
