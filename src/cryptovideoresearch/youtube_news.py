@@ -151,12 +151,16 @@ def parse_results(raw: dict, *, topic: str, query: str, hours: int, now: datetim
         hype = sum(token in lower for token in HYPE_TERMS)
         events = sum(token in lower for token in EVENT_TERMS)
         technical = sum(token in lower for token in TECHNICAL_ONLY_TERMS)
-        # Event relevance outweighs generic technical-analysis phrases. An
-        # event keyword in a title is NOT evidence that the event occurred.
-        score = (min(relevant, 5) * 2 + min(news, 3) * 1
-                 + min(events, 4) * 5 - min(technical, 4) * 5 - hype * 6)
-        if score < -3:
-            continue
+        # User-chosen YouTuber: process every upload without news-title
+        # filtering; the content might contain only personal market viewpoints.
+        if topic == "YouTuber 频道":
+            score = 0
+        else:
+            # Event keywords are not proof that the claimed event occurred.
+            score = (min(relevant, 5) * 2 + min(news, 3)
+                     + min(events, 4) * 5 - min(technical, 4) * 5 - hype * 6)
+            if score < -3:
+                continue
         channel = str(entry.get("channel") or entry.get("uploader") or "未知频道")
         views = entry.get("view_count")
         views = int(views) if isinstance(views, int) and views >= 0 else None
@@ -411,7 +415,8 @@ def classify_report(summary: str) -> str:
 
 
 def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
-                     refresh: bool, model: str, errors: list[str]) -> list[dict]:
+                     refresh: bool, model: str, errors: list[str],
+                     accept_no_news: bool = False) -> list[dict]:
     from .config import DEFAULT_MODEL
     prompt = Path(__file__).resolve().parents[2] / "prompts/youtube_news_zh.md"
     folder = output / "videos"
@@ -431,7 +436,7 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
             status = "cached-no-news" if kind == "no-news" else "cached"
             results.append({"video_id": video.id, "status": status,
                             "classification": kind, "analysis_file": str(target)})
-            if kind != "no-news":
+            if kind != "no-news" or accept_no_news:
                 completed += 1
             continue
         if video.caption_status == "none":
@@ -558,15 +563,16 @@ def main(argv: list[str] | None = None) -> int:
         errors.append("No confirmed recent videos for paid analysis; use --allow-unknown-age to override.")
     analyzed = analyze_selected(candidates_for_analysis, output, args.analyze_top,
                                 args.cookies, args.refresh, args.model or "",
-                                errors) if args.analyze_top and candidates_for_analysis else []
+                                errors, accept_no_news=bool(args.channel)) if args.analyze_top and candidates_for_analysis else []
     render(output, videos, new_count=new_count, errors=errors,
            requested=len(sources), analyzed=analyzed)
-    useful = sum(a['status'] in ('analyzed', 'cached') for a in analyzed)
+    successful = ('analyzed', 'cached', 'analyzed-no-news', 'cached-no-news') if args.channel else ('analyzed', 'cached')
+    useful = sum(a['status'] in successful for a in analyzed)
     no_news = sum(a['status'] in ('analyzed-no-news', 'cached-no-news') for a in analyzed)
     print(f"[PASS] videos={len(videos)} new={new_count} reports={useful} no_news={no_news} analyzed={sum(a['status'] == 'analyzed' for a in analyzed)} cached={sum(a['status'] == 'cached' for a in analyzed)}")
     print(f"Report: {output / 'latest.md'}")
     if args.analyze_top and useful == 0:
-        print("[WARN] No candidate with possible market news was successfully classified; "
+        print("[WARN] No eligible video report was completed; "
               "no-news reports, if any, were preserved. See latest.md.", file=sys.stderr)
         return 1
     return 0
