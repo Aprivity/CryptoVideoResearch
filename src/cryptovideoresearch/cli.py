@@ -70,10 +70,9 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print(f"[INFO] Optional local ASR: {'installed' if asr_available() else 'disabled (run cryptovideo asr-setup)'}")
     if asr_available():
         if installed_av is not None and installed_av >= 19:
-            print("[WARN] PyAV >=19 is incompatible with older faster-whisper audio decoders. "
-                  "Repair: cryptovideo asr-setup")
+            print("[INFO] PyAV 19+ available: local decoder compatibility adapter enabled.")
         else:
-            print(f"[INFO] PyAV compatibility: {'not installed' if installed_av is None else 'major ' + str(installed_av)}")
+            print(f"[INFO] PyAV: {'not installed' if installed_av is None else 'major ' + str(installed_av)}")
     print(f"[INFO] Tesseract: {'found' if shutil.which('tesseract') else 'optional, not installed'}")
     print(f"[INFO] proxy: {'configured' if any(os.environ.get(k) for k in ('HTTPS_PROXY','https_proxy','HTTP_PROXY','http_proxy')) else 'not configured'}")
     try:
@@ -153,24 +152,24 @@ def cmd_asr_setup(args: argparse.Namespace) -> int:
     from importlib.util import find_spec
     pyav_major = installed_pyav_major()
     if (available() and find_spec("socksio") is not None
-            and pyav_major is not None and pyav_major < 19):
-        print("[OK] faster-whisper, compatible PyAV (<19) and SOCKS support already installed.")
+            and pyav_major is not None):
+        print("[OK] faster-whisper, PyAV and SOCKS support already installed.")
+        if pyav_major >= 19:
+            print("[INFO] Using the built-in PyAV 19+ decoder compatibility adapter; no pip downloads needed.")
         return 0
-    if pyav_major is not None and pyav_major >= 19:
-        print("[ASR] Detected incompatible PyAV >=19; installing compatible av>=11,<19.")
     pip_socks_available = find_spec("socks") is not None
     env, method = asr_pip_environment(
         os.environ, pip_proxy=getattr(args, "pip_proxy", None),
         pip_socks_available=pip_socks_available,
     )
-    print("[ASR] Installing or upgrading faster-whisper, httpx[socks], and compatible PyAV.")
+    print("[ASR] Installing or upgrading faster-whisper and httpx[socks].")
     print("[ASR] No Whisper model weights are downloaded by this step.")
     print(f"[ASR] pip network route: {method}")
     # Install runtime packages directly: project is already an editable
     # install, and this avoids creating an unnecessary isolated build env.
     completed = subprocess.run(
         [sys.executable, "-m", "pip", "install",
-         "faster-whisper>=1.1,<2", "httpx[socks]>=0.27,<1", "av>=11,<19"],
+         "faster-whisper>=1.1,<2", "httpx[socks]>=0.27,<1"],
         check=False, env=env,
     )
     if completed.returncode:
@@ -198,12 +197,8 @@ def require_asr_runtime() -> None:
     from .asr import available, installed_pyav_major
     if not available():
         raise PipelineError("Local ASR runtime is not installed. Run: cryptovideo asr-setup")
-    pyav_major = installed_pyav_major()
-    if pyav_major is not None and pyav_major >= 19:
-        raise PipelineError(
-            "Installed PyAV 19+ may break faster-whisper's metadata_errors argument. "
-            "Run: cryptovideo asr-setup to install av>=11,<19."
-        )
+    if installed_pyav_major() is None:
+        raise PipelineError("PyAV is not installed. Run: cryptovideo asr-setup")
 
 
 def cmd_transcribe(args: argparse.Namespace) -> int:
