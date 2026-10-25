@@ -25,6 +25,10 @@ class PipelineError(RuntimeError):
     """Expected user-facing extraction or analysis failure."""
 
 
+class NoCaptionsError(PipelineError):
+    """No valid YouTube VTT tracks could be obtained; ASR is now appropriate."""
+
+
 class YouTubeAccessError(PipelineError):
     """YouTube requests verification; caption availability is still unknown."""
 
@@ -112,7 +116,10 @@ def valid_vtt(path: Path) -> bool:
 
 def prefer_caption(video_dir: Path) -> Path | None:
     # yt-dlp emits files like VIDEO_ID.zh-Hans.vtt. Do not read unrelated files.
-    files = [p for p in video_dir.glob("*.vtt") if valid_vtt(p)]
+    # An ASR transcript is not a genuine YouTube caption track. Only the
+    # dedicated optional fallback may reuse it.
+    files = [p for p in video_dir.glob("*.vtt")
+             if not p.name.startswith("local-asr-") and valid_vtt(p)]
     if not files:
         return None
     def priority(path: Path) -> int:
@@ -165,7 +172,7 @@ def extract_captions(
         "the uploader may not provide captions, YouTube may not offer auto-captions, "
         "or subtitles may be restricted"
     )
-    raise PipelineError(
+    raise NoCaptionsError(
         "No valid complete subtitle file was obtained; the YouTube description "
         "will NOT be sent to the model. Check video captions, proxy, cookies. " + note
     )
