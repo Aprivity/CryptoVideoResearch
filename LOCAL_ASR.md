@@ -96,3 +96,27 @@ bash run.sh
 
 - https://github.com/SYSTRAN/faster-whisper
 - https://github.com/yt-dlp/yt-dlp
+
+## 六、Ubuntu 本地 SOCKS 代理（`socks://`）兼容性
+
+在安装 `faster-whisper` 后，部分 Clash/系统代理环境会将 `HTTP_PROXY`、`HTTPS_PROXY` 或 `ALL_PROXY` 设为 `socks://127.0.0.1:7890`。YouTube 下载已经成功、但是 Hugging Face 模型首次下载时报：
+
+```text
+Local ASR failed: Unknown scheme for proxy URL URL('socks://127.0.0.1:7890')
+```
+
+这是**模型下载时的 HTTPX 代理协议兼容问题**，不是本地语音推理错误，也不证明音频文件损坏。
+
+V0.7 现在仅在加载 Whisper 模型的期间，将环境中 `socks://` 临时规范成 HTTPX 支持的 `socks5://`，并在加载结束或异常时恢复全部原值（包括 `ALL_PROXY` 和大小写不同的变量）；不会永久修改 Ubuntu 的全局代理，也不会更换用户的代理地址/端口。可选 ASR 依赖现在包含 `httpx[socks]`，如果曾在旧版安装 ASR，请**更新代码后再执行一次**：
+
+```bash
+cd ~/CryptoVideoResearch
+git pull --ff-only
+./.venv/bin/cryptovideo asr-setup
+./.venv/bin/cryptovideo transcribe \
+  'https://www.youtube.com/watch?v=DiDuGTf_-0g' \
+  --cookies chrome --asr-model base \
+  --output-dir ./outputs/asr-validation
+```
+
+`transcribe` 不调用 DeepSeek；已下载的音频文件在首次模型下载失败后会保留并复用。注意 `socks5://` 是代理协议指定，不是代理一定可用的证据：如果后续报连接超时、证书、Hub 下载地址被阻断等，需另外检查本地代理实际连通性。绝不要为排障关闭 HTTPS 证书验证。
