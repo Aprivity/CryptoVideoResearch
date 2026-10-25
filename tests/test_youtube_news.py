@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from cryptovideoresearch.cli import build_parser
 from cryptovideoresearch.youtube_news import (
-    find_videos, main, merge_videos, parse_results, verify_video_dates,
+    classify_report, find_videos, main, merge_videos, parse_results, verify_video_dates,
 )
 
 FIXTURE = Path(__file__).parent / "fixtures/youtube_search.json"
@@ -97,6 +97,33 @@ class YouTubeNewsTests(unittest.TestCase):
         items = parse_results(source, topic="BTC 与加密市场", query="news",
                               hours=72, now=now)
         self.assertEqual(len(merge_videos(items, 20)), 1)
+
+    def test_event_news_ranks_above_generic_price_prediction(self):
+        now = datetime(2026, 10, 25, 9, tzinfo=timezone.utc)
+        raw = {"entries": [
+            {"id": "ZWrgUWKOq_0", "title": "Bitcoin Ethereum Price Prediction 2026 Next Move"},
+            {"id": "abc123DEF_0", "title": "Bitcoin CPI inflation Fed policy news explained"},
+        ]}
+        found = parse_results(raw, topic="BTC 与加密市场", query="news", hours=168, now=now)
+        self.assertEqual(len(found), 2)
+        ordered = merge_videos(found, 10)
+        self.assertEqual(ordered[0].id, "abc123DEF_0")
+        self.assertGreater(ordered[0].relevance_score, ordered[1].relevance_score)
+
+    def test_model_news_marker_and_legacy_fallback(self):
+        self.assertEqual(
+            classify_report("新闻相关性：无具体事件\\n## 视频主题与核心信息\\n技术分析"),
+            "no-news",
+        )
+        self.assertEqual(
+            classify_report("新闻相关性：有具体事件\\n## 新闻事件清单\\n视频提到了 CPI"),
+            "reported-events",
+        )
+        self.assertEqual(
+            classify_report("## 视频主题与核心信息\\n没有可靠的新闻事件内容。"),
+            "no-news",
+        )
+        self.assertEqual(classify_report("## 核心观点\\n某些观点"), "unclassified")
 
     def test_corrupted_fixture_preserves_existing_report(self):
         with tempfile.TemporaryDirectory() as folder:
