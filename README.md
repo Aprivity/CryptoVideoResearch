@@ -1,5 +1,19 @@
 # CryptoVideoResearch
 
+## B：YouTube 市场新闻发现（V0.4 预览）
+
+本项目的 B 工作流现默认以 **YouTube 搜索** 为新闻解读视频入口，不再先采集 Google News / RSS 标题。原 RSS 模块保留为可选入口。详见 [YOUTUBE_NEWS.md](YOUTUBE_NEWS.md)。
+
+```bash
+# YouTube 搜索/筛选，不调用付费模型
+cryptovideo youtube-news --hours 168
+
+# 前 2 个候选调用 Summarize + DeepSeek，可能消耗 API 额度
+cryptovideo youtube-news --analyze-top 2 --cookies chrome
+```
+
+YouTube 视频中的新闻叙述并不等于经过独立核验的事实；本工具会区分事件转述与博主观点，并标注未知发布时间。
+
 ## Ubuntu 全新系统：一键安装（实验功能分支）
 
 无需预先配置 Python、Node.js、Summarize 或 yt-dlp；准备好网络和 sudo 权限，执行：
@@ -8,7 +22,7 @@
 bash -c 'set -o pipefail; curl -fsSL https://raw.githubusercontent.com/Aprivity/CryptoVideoResearch/a078f169ad8f62d2d2477d6109169650470d3a22/scripts/bootstrap.sh | bash'
 ~~~
 
-脚本自动安装依赖、创建虚拟环境、在终端安全配置 DeepSeek API Key、运行自检，并启动一次 B 新闻采集。之后直接使用 cryptovideo news；详细说明见 [BOOTSTRAP.md](BOOTSTRAP.md)。仅支持 Ubuntu 22.04/24.04/26.04；需要 curl（缺失时先通过 apt 安装）。新闻分析与后台持续监控仍属于后续阶段。
+脚本自动安装依赖、创建虚拟环境、在终端安全配置 DeepSeek API Key、运行自检，并启动一次 B 的 YouTube 市场新闻视频发现。之后直接使用 cryptovideo news；详细说明见 [BOOTSTRAP.md](BOOTSTRAP.md)。仅支持 Ubuntu 22.04/24.04/26.04；需要 curl（缺失时先通过 apt 安装）。新闻分析与后台持续监控仍属于后续阶段。
 
 
 YouTube 投资视频字幕提取与观点整理的开源工具。**研究资料收集，不提供投资建议、交易信号，也不执行交易。**
