@@ -189,6 +189,59 @@ class InteractiveTests(unittest.TestCase):
             extractor.assert_called_once()
             model.assert_called_once()
 
+    def test_bot_challenge_during_metadata_aborts_before_captions_or_ai(self):
+        from cryptovideoresearch.pipeline import YouTubeAccessError
+        listing = {"entries": [
+            {"id": "ZWrgUWKOq_0", "title": "美股晨报", "channel": "Chosen",
+             "duration": 300},
+            {"id": "abc123DEF_0", "title": "市场讨论", "channel": "Chosen",
+             "duration": 400},
+        ]}
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("cryptovideoresearch.channels.list_channel_uploads",
+                       return_value=listing), \
+                 patch("cryptovideoresearch.youtube_news.fetch_video_metadata",
+                       side_effect=YouTubeAccessError("Sign in to confirm you're not a bot")) as metadata, \
+                 patch("cryptovideoresearch.youtube_news.extract_captions") as extract, \
+                 patch("cryptovideoresearch.youtube_news.analyze_transcript") as model:
+                code = news_main([
+                    "--channel", "@creator123", "--output", directory,
+                    "--verify-top", "10", "--analyze-top", "1",
+                ])
+            self.assertEqual(code, 1)
+            metadata.assert_called_once()
+            extract.assert_not_called()
+            model.assert_not_called()
+            report = json.loads((Path(directory) / "latest.json").read_text(encoding="utf-8"))
+            self.assertTrue(any("YouTube authentication challenge:" in err
+                                for err in report["errors"]))
+            self.assertEqual(report["analyses"], [])
+
+    def test_bot_challenge_during_captions_stops_other_video_attempts(self):
+        from cryptovideoresearch.pipeline import YouTubeAccessError
+        from cryptovideoresearch.youtube_news import Video
+        items = [
+            Video(
+                id=vid, title="财经节目", channel="Creator",
+                url=f"https://www.youtube.com/watch?v={vid}", topic="YouTuber 频道",
+                published_at_utc=None, duration_seconds=300, views=None,
+                relevance_score=0, time_status="unknown",
+            )
+            for vid in ("ZWrgUWKOq_0", "abc123DEF_0")
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("cryptovideoresearch.youtube_news.extract_captions",
+                       side_effect=YouTubeAccessError("Sign in to confirm you're not a bot")) as extract:
+                errs = []
+                result = analyze_selected(
+                    items, Path(directory), 2, "none", False, "", errs,
+                    accept_no_news=True,
+                )
+            self.assertEqual([r["status"] for r in result], ["access-blocked"])
+            extract.assert_called_once()
+            self.assertEqual(len(errs), 1)
+            self.assertIn("authentication challenge", errs[0])
+
     def test_backward_compatibility_run_accepts_channel_flag(self):
         args = build_parser().parse_args(["run", "--channel", "@creator123", "--count", "1"])
         self.assertEqual(args.channel, "@creator123")
