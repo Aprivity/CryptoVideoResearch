@@ -31,7 +31,9 @@ def split_model_report(summary: str) -> tuple[str, list[str], bool]:
     # Keep "新闻相关性：" at the top of analysis.md for old classifying code.
     full = (summary[:match.start()].rstrip() + "\n\n"
             + summary[stop:].lstrip()).strip() + "\n"
-    return full, bullets[:5], len(bullets) >= 3
+    # Some videos genuinely have fewer than three usable claims. Keep their
+    # model-selected points instead of manufacturing additional claims.
+    return full, bullets[:5], bool(bullets)
 
 
 def legacy_excerpts(full: str) -> list[str]:
@@ -65,8 +67,8 @@ def quick_markdown(full: str, ranked_bullets: list[str], *, from_model: bool,
     # instead of silently rewriting numbers or ticker symbols.
     normalized = []
     for bullet in chosen[:5]:
-        if len(bullet) > 180:
-            bullet = bullet[:177].rstrip() + "…（详情见完整报告）"
+        if len(bullet) > 135:
+            bullet = bullet[:132].rstrip() + "…（详情见完整报告）"
         normalized.append(bullet)
     lines = [
         "# 一分钟快速摘要（未经核验）", "",
