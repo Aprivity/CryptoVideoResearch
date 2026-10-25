@@ -5,6 +5,7 @@ import io
 import json
 import os
 import pty
+import select
 import threading
 import tempfile
 import unittest
@@ -45,7 +46,10 @@ class InteractiveTests(unittest.TestCase):
                         chosen.append(choose("B", ["新闻", "YouTuber", "退出"]))
                 thread = threading.Thread(target=worker, daemon=True)
                 thread.start()
-                # The sequence moves the default highlight down once.
+                # Wait for the menu to enter cbreak mode and render before
+                # sending keys; otherwise the PTY's canonical mode may buffer.
+                self.assertTrue(select.select([master], [], [], 2)[0])
+                os.read(master, 8192)
                 os.write(master, b"\\x1b[B\\r")
                 thread.join(timeout=3)
                 self.assertFalse(thread.is_alive(), "Arrow selection did not finish")
