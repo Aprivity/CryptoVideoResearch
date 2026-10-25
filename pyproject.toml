@@ -12,6 +12,10 @@ license = { text = "MIT" }
 authors = [{ name = "Aprivity" }]
 dependencies = []
 
+[project.optional-dependencies]
+# Lazy import: standard news-only installations stay small and offline.
+asr = ["faster-whisper>=1.1,<2"]
+
 [project.scripts]
 cryptovideo = "cryptovideoresearch.cli:main"
 
