@@ -77,6 +77,38 @@ def _date(value: dict) -> str | None:
     return None
 
 
+# Explicit video-title dates can identify obvious older programmes even when
+# YouTube's search API does not return upload_date. This is only a *negative*
+# filter: recent-looking title dates do not verify the actual upload date.
+TITLE_DATE = re.compile(
+    r"(?<![0-9])(20[0-9]{2})[.\\/-]?\\s*(0?[1-9]|1[0-2])[.\\/-]?\\s*"
+    r"(0?[1-9]|[12][0-9]|3[01])(?:日)?(?![0-9])"
+)
+
+
+def old_title_date(title: str, *, now: datetime, hours: int) -> str | None:
+    """Return an unambiguously old, complete calendar date present in title.
+
+    Only applies when provider upload metadata is absent. Never infer a
+    publication timestamp from a YYYYMMDD string appearing in a video title.
+    """
+    dates: list[datetime] = []
+    for match in TITLE_DATE.finditer(title):
+        try:
+            candidate = datetime(int(match[1]), int(match[2]), int(match[3]),
+                                 tzinfo=timezone.utc)
+            dates.append(candidate)
+        except ValueError:
+            continue
+    if not dates:
+        return None
+    # Use the newest explicit full date in case historical periods are compared.
+    latest = max(dates)
+    if latest.date() < (now - timedelta(hours=hours)).date():
+        return latest.date().isoformat()
+    return None
+
+
 def parse_results(raw: dict, *, topic: str, query: str, hours: int, now: datetime,
                   min_seconds: int = 90) -> list[Video]:
     if not isinstance(raw, dict):
@@ -97,6 +129,11 @@ def parse_results(raw: dict, *, topic: str, query: str, hours: int, now: datetim
         if duration is not None and duration < min_seconds:
             continue
         published = _date(entry)
+        # Do not waste DeepSeek calls on obviously old historical programmes.
+        # e.g. 20220810, 20230314, 2026.7.25, 20230731 in a video title.
+        # This is a title-date heuristic, NOT confirmation of upload time.
+        if published is None and old_title_date(title, now=now, hours=hours):
+            continue
         if published:
             # A YYYY-MM-DD upload date carries no timezone/time-of-day.
             # Compare dates to dates; never pretend it is midnight UTC.
