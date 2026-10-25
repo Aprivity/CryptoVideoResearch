@@ -4,7 +4,7 @@
 set -Eeuo pipefail
 
 APP="CryptoVideoResearch"
-BRANCH="${CVR_BRANCH:-feat/v0.5-one-command-reports}"
+BRANCH="${CVR_BRANCH:-feat/v0.6-interactive-cli}"
 REPO="https://github.com/Aprivity/CryptoVideoResearch.git"
 TARGET="${CVR_INSTALL_DIR:-$HOME/CryptoVideoResearch}"
 LOCAL_BIN="$HOME/.local/bin"
@@ -132,7 +132,7 @@ if [[ -e "$TARGET" ]]; then
     die "$TARGET already exists and is not a CryptoVideoResearch source checkout"
   fi
 else
-  git clone --depth 1 --single-branch --branch "$BRANCH" "$REPO" "$TARGET"
+  git clone --depth 1 --no-single-branch --branch "$BRANCH" "$REPO" "$TARGET"
 fi
 
 note "Creating project virtual environment"
@@ -164,15 +164,16 @@ note "Running local self-check"
   warn "Doctor reported missing components; review the output above"
 
 if [[ "${CVR_SKIP_INITIAL_RUN:-0}" != 1 ]]; then
-  count="${CVR_REPORT_COUNT:-2}"
-  case "$count" in 1|2|3|4|5) ;; *) die "CVR_REPORT_COUNT must be 1..5" ;; esac
-  note "Generating up to $count independent YouTube video reports (paid DeepSeek API calls)"
-  if "$TARGET/.venv/bin/cryptovideo" run --count "$count" --cookies "${CVR_COOKIES:-none}"; then
-    note "Report index: $TARGET/outputs/youtube-news/latest.md"
+  if [[ -t 0 ]]; then
+    note "Opening interactive B workflow; Enter selects market news"
+    "$TARGET/.venv/bin/cryptovideo" menu || warn "Interactive menu closed; installation succeeded"
+  elif [[ -r /dev/tty ]]; then
+    note "Opening interactive B workflow in the local terminal"
+    "$TARGET/.venv/bin/cryptovideo" menu < /dev/tty || warn "Interactive menu closed; installation succeeded"
   else
-    warn "Video research did not complete; dependencies installed. Retry: cryptovideo run"
+    warn "No interactive terminal available. Later use: cryptovideo menu"
   fi
 fi
 
 note "Ready"
-printf 'Project: %s\nOne-command reports: cryptovideo run\nReport index: %s/outputs/youtube-news/latest.md\nStatus: cryptovideo doctor\n' "$TARGET"
+printf 'Project: %s\nInteractive B menu: cryptovideo (or cryptovideo menu)\nScripted reports: cryptovideo run\nReport index: %s/outputs/youtube-news/latest.md\nStatus: cryptovideo doctor\n' "$TARGET"
