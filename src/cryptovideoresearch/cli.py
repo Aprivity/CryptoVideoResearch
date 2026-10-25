@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import webbrowser
 from pathlib import Path
 
@@ -204,21 +205,26 @@ def cmd_run(args: argparse.Namespace) -> int:
         argv.extend(["--model", args.model])
     if args.fixture:
         argv.extend(["--fixture", args.fixture])
+    started_at = time.time()
     code = run_youtube_news(argv)
-    if code == 0:
+    metadata = output / "latest.json"
+    # Even a no-news run writes a real individual report. Don't hide its path.
+    # Avoid accidentally showing stale output if discovery failed before rendering.
+    if metadata.is_file() and metadata.stat().st_mtime >= started_at - 2:
         print(f"\nVideo candidate index: {output / 'latest.md'}")
-        metadata = output / "latest.json"
-        if metadata.is_file():
-            details = json.loads(metadata.read_text(encoding="utf-8"))
-            present = [
-                record for record in details.get("analyses", [])
-                if record.get("status") in ("cached", "analyzed")
-            ]
-            for item in present:
-                print(f"Video report ({item['status']}): {item['analysis_file']}")
-            if args.count and not present:
-                print("[NOTICE] No report produced. Read latest.md for missing dates, "
-                      "unavailable subtitles or YouTube access errors.")
+        details = json.loads(metadata.read_text(encoding="utf-8"))
+        present = [
+            record for record in details.get("analyses", [])
+            if record.get("status") in (
+                "cached", "analyzed", "cached-no-news", "analyzed-no-news"
+            )
+        ]
+        for item in present:
+            print(f"Video report ({item['status']}, {item.get('classification', 'unclassified')}): "
+                  f"{item['analysis_file']}")
+        if args.count and not present:
+            print("[NOTICE] No report produced. Read latest.md for missing dates, "
+                  "unavailable subtitles or YouTube access errors.")
     return code
 
 
