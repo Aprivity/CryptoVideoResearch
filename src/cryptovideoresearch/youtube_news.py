@@ -329,7 +329,8 @@ def render(output: Path, videos: list[Video], *, new_count: int,
         lines += ["", "## 已提取的视频观点（摘要仍未事实核验）", ""]
         for item in analyzed:
             path = item.get("analysis_file") or "—"
-            lines.append(f"- {item['video_id']}：{item['status']}｜{path}")
+            kind = item.get("classification", "unknown")
+            lines.append(f"- {item['video_id']}：{item['status']}｜视频事件相关性：{kind}｜{path}")
     if errors:
         lines += ["", "## 检索或分析错误", ""]
         lines += [f"- {err[:240]}" for err in errors]
@@ -338,6 +339,28 @@ def render(output: Path, videos: list[Video], *, new_count: int,
     tmp = output / "latest.md.tmp"
     tmp.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     tmp.replace(output / "latest.md")
+
+
+def classify_report(summary: str) -> str:
+    """Classify the *video content* (not the truth of the reported events).
+
+    Supports the new explicit label, plus a narrow legacy no-news fallback.
+    If the model omits the label, do not mislabel an unclassified report as news.
+    """
+    beginning = summary[:2000]
+    label = re.search(
+        r"(?:^|\\n)\\s*(?:\\*\\*)?新闻相关性[：:]\\s*(有具体事件|无具体事件|无法判断)",
+        beginning,
+    )
+    if label:
+        return {
+            "有具体事件": "reported-events",
+            "无具体事件": "no-news",
+            "无法判断": "uncertain",
+        }[label.group(1)]
+    if "没有可靠的新闻事件内容" in beginning:
+        return "no-news"
+    return "unclassified"
 
 
 def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
@@ -357,8 +380,12 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
             break
         target = folder / video.id / "analysis.md"
         if target.is_file() and not refresh:
-            results.append({"video_id": video.id, "status": "cached", "analysis_file": str(target)})
-            completed += 1
+            kind = classify_report(target.read_text(encoding="utf-8"))
+            status = "cached-no-news" if kind == "no-news" else "cached"
+            results.append({"video_id": video.id, "status": status,
+                            "classification": kind, "analysis_file": str(target)})
+            if kind != "no-news":
+                completed += 1
             continue
         if video.caption_status == "none":
             errors.append(f"{video.id}: YouTube metadata reports no downloadable zh/en VTT caption tracks")
@@ -377,8 +404,12 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
                 subtitle_source=source, summary=summary,
                 model=model or DEFAULT_MODEL,
             )
-            results.append({"video_id": video.id, "status": "analyzed", "analysis_file": str(report)})
-            completed += 1
+            kind = classify_report(summary)
+            status = "analyzed-no-news" if kind == "no-news" else "analyzed"
+            results.append({"video_id": video.id, "status": status,
+                            "classification": kind, "analysis_file": str(report)})
+            if kind != "no-news":
+                completed += 1
         except (PipelineError, OSError, ValueError, RuntimeError) as exc:
             msg = f"{video.id} analysis failed: {exc}"
             errors.append(msg[:300])
@@ -460,11 +491,13 @@ def main(argv: list[str] | None = None) -> int:
                                 errors) if args.analyze_top and candidates_for_analysis else []
     render(output, videos, new_count=new_count, errors=errors,
            requested=len(sources), analyzed=analyzed)
-    successful = sum(a['status'] in ('analyzed', 'cached') for a in analyzed)
-    print(f"[PASS] videos={len(videos)} new={new_count} analyzed={sum(a['status'] == 'analyzed' for a in analyzed)} cached={sum(a['status'] == 'cached' for a in analyzed)}")
+    useful = sum(a['status'] in ('analyzed', 'cached') for a in analyzed)
+    no_news = sum(a['status'] in ('analyzed-no-news', 'cached-no-news') for a in analyzed)
+    print(f"[PASS] videos={len(videos)} new={new_count} reports={useful} no_news={no_news} analyzed={sum(a['status'] == 'analyzed' for a in analyzed)} cached={sum(a['status'] == 'cached' for a in analyzed)}")
     print(f"Report: {output / 'latest.md'}")
-    if args.analyze_top and successful == 0:
-        print("[WARN] No independent video report was generated; see latest.md for reasons.", file=sys.stderr)
+    if args.analyze_top and useful == 0:
+        print("[WARN] No candidate with possible market news was successfully classified; "
+              "no-news reports, if any, were preserved. See latest.md.", file=sys.stderr)
         return 1
     return 0
 
