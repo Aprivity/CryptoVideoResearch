@@ -304,8 +304,9 @@ def main() -> int:
             if selection == 0:
                 launch(None, config)
             elif selection == 1:
-                entered = prompt_text("YouTuber 名称、@handle 或 YouTube 频道链接（回车取消）：")
+                entered = prompt_text("YouTuber 名称、@handle 或 YouTube 频道链接（直接回车=市场新闻）：")
                 if not entered:
+                    launch(None, config)
                     continue
                 channel = creator_from_input(entered, config)
                 if channel is not None:
