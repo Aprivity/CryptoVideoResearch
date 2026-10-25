@@ -64,6 +64,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     show("yt-dlp", find_ytdlp() is not None, find_ytdlp() or "")
     show("prompt file", default_prompt_path().is_file())
     print(f"[INFO] FFmpeg: {'found' if shutil.which('ffmpeg') else 'optional, not installed'}")
+    from .asr import available as asr_available
+    print(f"[INFO] Optional local ASR: {'installed' if asr_available() else 'disabled (run cryptovideo asr-setup)'}")
     print(f"[INFO] Tesseract: {'found' if shutil.which('tesseract') else 'optional, not installed'}")
     print(f"[INFO] proxy: {'configured' if any(os.environ.get(k) for k in ('HTTPS_PROXY','https_proxy','HTTP_PROXY','http_proxy')) else 'not configured'}")
     try:
@@ -73,6 +75,27 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         print("[INFO] DeepSeek key: missing (run cryptovideo setup)")
     print("The doctor runs no API calls, browser logins, or paid requests.")
     return 1 if problems else 0
+
+
+def cmd_asr_setup(args: argparse.Namespace) -> int:
+    """Install the opt-in ASR dependency, without downloading model weights."""
+    from .asr import available
+    if available():
+        print("[OK] faster-whisper is already installed.")
+        return 0
+    root = Path(__file__).resolve().parents[2]
+    print("[ASR] Installing optional faster-whisper runtime via pip.")
+    print("[ASR] Model weights will only download upon your first ASR transcription.")
+    completed = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-e", f"{root}[asr]"],
+        check=False,
+    )
+    if completed.returncode:
+        print("[FAIL] Optional ASR installation failed; normal caption-only mode is unaffected.",
+              file=sys.stderr)
+        return completed.returncode
+    print("[OK] Local ASR installed. Select ASR fallback in the interactive settings.")
+    return 0
 
 
 def cmd_login(args: argparse.Namespace) -> int:
@@ -87,10 +110,20 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     video_id = youtube_video_id(args.url)
     root = Path(args.output_dir).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
-    transcript, source = extract_captions(
-        args.url, root, cookies=args.cookies, refresh=args.refresh
-    )
-    print(f"Captions: {transcript} ({source})", file=sys.stderr)
+    from .pipeline import NoCaptionsError
+    try:
+        transcript, source = extract_captions(
+            args.url, root, cookies=args.cookies, refresh=False
+        )
+    except NoCaptionsError:
+        if not args.asr_fallback:
+            raise
+        from .asr import transcribe_video
+        transcript, source = transcribe_video(
+            args.url, root, cookies=args.cookies, model=args.asr_model,
+            device=args.asr_device, keep_audio=args.keep_audio,
+        )
+    print(f"Transcript: {transcript} ({source})", file=sys.stderr)
     summary = analyze_transcript(
         transcript, model=args.model,
         prompt=Path(args.prompt).expanduser() if args.prompt else None,
@@ -178,6 +211,11 @@ def cmd_youtube_news(args: argparse.Namespace) -> int:
         argv.append("--allow-unknown-age")
     if args.model:
         argv.extend(["--model", args.model])
+    if args.asr_fallback:
+        argv.extend(["--asr-fallback", "--asr-model", args.asr_model,
+                     "--asr-device", args.asr_device])
+    if args.keep_audio:
+        argv.append("--keep-audio")
     return run_youtube_news(argv)
 
 
@@ -219,6 +257,11 @@ def cmd_run(args: argparse.Namespace) -> int:
         argv.append("--refresh")
     if args.model:
         argv.extend(["--model", args.model])
+    if args.asr_fallback:
+        argv.extend(["--asr-fallback", "--asr-model", args.asr_model,
+                     "--asr-device", args.asr_device])
+    if args.keep_audio:
+        argv.append("--keep-audio")
     if args.fixture:
         argv.extend(["--fixture", args.fixture])
     started_at = time.time()
@@ -260,6 +303,8 @@ def build_parser() -> argparse.ArgumentParser:
     setup.set_defaults(handler=cmd_setup)
     doctor = sub.add_parser("doctor", help="Check local dependencies (offline)")
     doctor.set_defaults(handler=cmd_doctor)
+    setup_asr = sub.add_parser("asr-setup", help="Install optional local ASR runtime (no model download)")
+    setup_asr.set_defaults(handler=cmd_asr_setup)
     login = sub.add_parser("login", help="Open YouTube for manual sign-in/verification")
     login.set_defaults(handler=cmd_login)
     news = sub.add_parser("news", help="Fetch RSS news once, de-duplicate and write a source-linked report")
@@ -284,6 +329,10 @@ def build_parser() -> argparse.ArgumentParser:
     ytnews.add_argument("--model", help="Model name if analyzing")
     ytnews.add_argument("--fixture", help="Offline YouTube search JSON fixture")
     ytnews.add_argument("--refresh", action="store_true", help="Re-analyze existing summaries")
+    ytnews.add_argument("--asr-fallback", action="store_true", help="Use optional local Whisper when subtitles are missing")
+    ytnews.add_argument("--asr-model", choices=("tiny", "base", "small", "medium"), default="small")
+    ytnews.add_argument("--asr-device", choices=("cpu", "cuda"), default="cpu")
+    ytnews.add_argument("--keep-audio", action="store_true", help="Retain source audio after successful ASR")
     ytnews.set_defaults(handler=cmd_youtube_news)
     run = sub.add_parser("run", help="One command: search YouTube and generate separate AI video reports")
     run.add_argument("--count", type=int, choices=range(1, 6), default=2,
@@ -296,6 +345,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--strict-dates", action="store_true",
                      help="Only analyze videos confirmed to be in the requested time window")
     run.add_argument("--refresh", action="store_true", help="Re-run DeepSeek for existing reports")
+    run.add_argument("--asr-fallback", action="store_true", help="Fallback to local Whisper for videos without subtitles")
+    run.add_argument("--asr-model", choices=("tiny", "base", "small", "medium"), default="small")
+    run.add_argument("--asr-device", choices=("cpu", "cuda"), default="cpu")
+    run.add_argument("--keep-audio", action="store_true", help="Keep source audio after successful ASR")
     run.add_argument("--model", help="Override model used for video analysis")
     run.add_argument("--config", help="Custom YouTube search configuration")
     run.add_argument("--channel", help="YouTuber @handle or official channel URL; report separately")
@@ -308,6 +361,10 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument("url", help="YouTube watch/short/live URL")
             p.add_argument("--cookies", choices=("none", "chrome", "firefox", "chromium", "brave"), default="none")
             p.add_argument("--refresh", action="store_true", help="Attempt to fetch captions again")
+            p.add_argument("--asr-fallback", action="store_true", help="Optional local Whisper if no captions")
+            p.add_argument("--asr-model", choices=("tiny", "base", "small", "medium"), default="small")
+            p.add_argument("--asr-device", choices=("cpu", "cuda"), default="cpu")
+            p.add_argument("--keep-audio", action="store_true")
             p.set_defaults(handler=cmd_analyze)
         else:
             p.add_argument("transcript", help="Local VTT or plain UTF-8 text file")
