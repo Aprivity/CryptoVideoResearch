@@ -384,6 +384,7 @@ class ASRTests(unittest.TestCase):
             with patch("cryptovideoresearch.cli.extract_captions",
                        side_effect=NoCaptionsError("no subtitles")) as native, \
                  patch("cryptovideoresearch.asr.available", return_value=True), \
+                 patch("cryptovideoresearch.asr.installed_pyav_major", return_value=19), \
                  patch("cryptovideoresearch.asr.transcribe_video",
                        return_value=(transcript, "local-asr")) as transcriber, \
                  patch("cryptovideoresearch.cli.analyze_transcript") as deepseek:
