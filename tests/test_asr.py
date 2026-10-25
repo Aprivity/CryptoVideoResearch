@@ -112,6 +112,44 @@ class ASRTests(unittest.TestCase):
             asr_pip_environment({"HTTPS_PROXY": "socks5://proxy.example.test:1080"},
                                 pip_socks_available=False)
 
+    def test_asr_setup_repairs_existing_pyav_19_instead_of_returning_early(self):
+        from cryptovideoresearch.cli import cmd_asr_setup
+        from argparse import Namespace
+        with patch("cryptovideoresearch.asr.available", return_value=True), \
+             patch("cryptovideoresearch.asr.installed_pyav_major", return_value=19), \
+             patch("cryptovideoresearch.cli.subprocess.run",
+                   return_value=subprocess.CompletedProcess([], 0, "", "")) as runner:
+            self.assertEqual(
+                cmd_asr_setup(Namespace(pip_proxy="http://127.0.0.1:7890")), 0,
+            )
+        packages = runner.call_args.args[0]
+        self.assertIn("av>=11,<19", packages)
+        self.assertIn("faster-whisper>=1.1,<2", packages)
+
+    def test_incompatible_pyav_is_detected_before_video_download(self):
+        from cryptovideoresearch.cli import require_asr_runtime
+        with patch("cryptovideoresearch.asr.available", return_value=True), \
+             patch("cryptovideoresearch.asr.installed_pyav_major", return_value=19):
+            with self.assertRaisesRegex(PipelineError, "asr-setup"):
+                require_asr_runtime()
+
+    def test_legacy_decoder_kwarg_error_is_actionable(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            audio = root / "audio.m4a"
+            audio.write_bytes(b"A" * 2048)
+            class OldDecoderWhisper:
+                def __init__(self, *args, **kwargs):
+                    pass
+                def transcribe(self, *args, **kwargs):
+                    raise TypeError("open() got an unexpected keyword argument 'metadata_errors'")
+            with patch.dict(sys.modules, {
+                "faster_whisper": types.SimpleNamespace(WhisperModel=OldDecoderWhisper)
+            }):
+                with self.assertRaisesRegex(PipelineError, "av>=11,<19"):
+                    transcribe_audio(audio, root / "local-asr-base.vtt", model="base")
+            self.assertTrue(audio.exists())
+
     def test_asr_setup_direct_install_avoids_isolated_project_build(self):
         from cryptovideoresearch.cli import cmd_asr_setup
         from argparse import Namespace
@@ -124,6 +162,7 @@ class ASRTests(unittest.TestCase):
         args, kwargs = pip.call_args
         self.assertIn("faster-whisper>=1.1,<2", args[0])
         self.assertIn("httpx[socks]>=0.27,<1", args[0])
+        self.assertIn("av>=11,<19", args[0])
         self.assertNotIn("-e", args[0])
         self.assertEqual(kwargs["env"]["HTTPS_PROXY"], "http://127.0.0.1:7890")
 
