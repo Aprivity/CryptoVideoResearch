@@ -130,6 +130,22 @@ def cmd_analyze_file(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_news(args: argparse.Namespace) -> int:
+    """Run one news scan using the repository's configured RSS feeds."""
+    from .news_monitor import main as run_news
+
+    root = Path(__file__).resolve().parents[2]
+    config = Path(args.config).expanduser() if args.config else root / "news_sources.json"
+    output = Path(args.output).expanduser() if args.output else root / "outputs/news"
+    argv = [
+        "--config", str(config), "--output", str(output),
+        "--hours", str(args.hours), "--limit", str(args.limit),
+    ]
+    if args.fixture:
+        argv.extend(["--fixture", args.fixture])
+    return run_news(argv)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cryptovideo",
@@ -144,6 +160,13 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.set_defaults(handler=cmd_doctor)
     login = sub.add_parser("login", help="Open YouTube for manual sign-in/verification")
     login.set_defaults(handler=cmd_login)
+    news = sub.add_parser("news", help="Fetch RSS news once, de-duplicate and write a source-linked report")
+    news.add_argument("--config", help="Override news_sources.json")
+    news.add_argument("--output", help="Override news report directory")
+    news.add_argument("--hours", type=int, default=72, help="Lookback window in hours")
+    news.add_argument("--limit", type=int, default=100, help="Maximum report items")
+    news.add_argument("--fixture", help="Offline RSS XML fixture for repeatable testing")
+    news.set_defaults(handler=cmd_news)
     for command in ("analyze", "analyze-file"):
         p = sub.add_parser(command, help="Analyze a YouTube URL or an existing transcript")
         if command == "analyze":
