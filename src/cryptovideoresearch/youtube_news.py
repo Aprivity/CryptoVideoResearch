@@ -395,6 +395,8 @@ def render(output: Path, videos: list[Video], *, new_count: int,
             path = item.get("analysis_file") or "—"
             kind = item.get("classification", "unknown")
             lines.append(f"- {item['video_id']}：{item['status']}｜视频事件相关性：{kind}｜{path}")
+            if item.get("quick_file"):
+                lines.append(f"  - 1 分钟速览：{item['quick_file']}")
     if errors:
         lines += ["", "## 检索或分析错误", ""]
         lines += [f"- {err[:240]}" for err in errors]
@@ -458,8 +460,11 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
         if target.is_file() and not refresh:
             kind = classify_report(target.read_text(encoding="utf-8"))
             status = "cached-no-news" if kind == "no-news" else "cached"
+            from .report_outputs import backfill_cached_report
+            companions = backfill_cached_report(target)
             results.append({"video_id": video.id, "status": status,
-                            "classification": kind, "analysis_file": str(target)})
+                            "classification": kind, "analysis_file": str(target),
+                            **companions})
             if kind != "no-news" or accept_no_news:
                 completed += 1
             continue
@@ -492,7 +497,8 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
                     device=asr_device, keep_audio=keep_audio, refresh=False,
                 )
             model_attempts += 1
-            summary = analyze_transcript(transcript, model=model or DEFAULT_MODEL, prompt=prompt)
+            summary = analyze_transcript(transcript, model=model or DEFAULT_MODEL,
+                                         prompt=prompt, subtitle_source=source)
             report = write_report(
                 output_root=folder, video_id=video.id,
                 source_url=video.url, transcript=transcript,
@@ -503,6 +509,8 @@ def analyze_selected(videos: list[Video], output: Path, n: int, cookies: str,
             status = "analyzed-no-news" if kind == "no-news" else "analyzed"
             results.append({"video_id": video.id, "status": status,
                             "classification": kind, "analysis_file": str(report),
+                            "quick_file": str(report.parent / "quick.md") if report.is_file() else None,
+                            "finance_quality_file": str(report.parent / "finance_quality.json") if report.is_file() else None,
                             "transcript_source": source})
             if kind != "no-news":
                 completed += 1
